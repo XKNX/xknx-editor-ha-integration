@@ -5,3 +5,5 @@
 homeassistant @ git+https://github.com/home-assistant/core@dev
 pytest-home-assistant @ git+https://github.com/home-assistant/core@dev#subdirectory=packages/pytest-home-assistant
 home-assistant-frontend
+# Coverage for Codecov (pytest --cov)
+pytest-cov

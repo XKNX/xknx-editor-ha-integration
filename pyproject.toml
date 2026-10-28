@@ -8,6 +8,23 @@ asyncio_default_fixture_loop_scope = "function"
 addopts = "-p no:respx"
 pythonpath = ["."]
 testpaths = ["tests"]
+filterwarnings = [
+    # Home Assistant's own http server, not the integration (aiohttp discourages subclassing).
+    "ignore:Inheritance class HomeAssistantApplication from web.Application is discouraged:DeprecationWarning",
+]
+
+[tool.coverage.run]
+# Measured in CI with `pytest --cov` and uploaded to Codecov: the integration, without the tests.
+source = ["custom_components/xknx_editor"]
+
+[tool.coverage.report]
+# Lines that never run by design
+exclude_also = [
+    "if TYPE_CHECKING:",
+    '@(typing\.)?overload',
+    "raise NotImplementedError",
+    'if __name__ == "__main__":',
+]
 
 [tool.ruff]
 target-version = "py314"
