@@ -15,11 +15,11 @@
       "init": {
         "title": "Opties voor XKNX Editor",
         "data": {
-          "allow_non_admins": "Paneel voor alle gebruikers",
+          "allow_non_admins": "Editor voor alle gebruikers",
           "requirements": "Requirements-bestand"
         },
         "data_description": {
-          "allow_non_admins": "Ook gebruikers die geen beheerder zijn, zien XKNX Editor in de zijbalk. De editor heeft geen eigen rollen: iedereen die hem opent, kan het project wijzigen en apparaten op de KNX-bus programmeren.",
+          "allow_non_admins": "Ook gebruikers die geen beheerder zijn, zien XKNX Editor in de zijbalk en kunnen de MCP-server gebruiken met hun eigen langdurige toegangstoken. De editor heeft geen eigen rollen: iedereen die hem gebruikt, kan het project wijzigen en apparaten op de KNX-bus programmeren.",
           "requirements": "Laat leeg voor de editorversie van deze integratie. Anders een URL of een pad op de Home Assistant-host van een ander requirements-bestand, bijvoorbeeld om een editorbuild te proberen."
         }
       }

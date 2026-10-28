@@ -15,11 +15,11 @@
       "init": {
         "title": "Opcje XKNX Editor",
         "data": {
-          "allow_non_admins": "Panel dla wszystkich użytkowników",
+          "allow_non_admins": "Edytor dla wszystkich użytkowników",
           "requirements": "Plik wymagań"
         },
         "data_description": {
-          "allow_non_admins": "XKNX Editor na pasku bocznym widzą również użytkownicy, którzy nie są administratorami. Edytor nie ma własnych ról: każdy, kto go otworzy, może zmieniać projekt i programować urządzenia na magistrali KNX.",
+          "allow_non_admins": "XKNX Editor na pasku bocznym widzą również użytkownicy, którzy nie są administratorami, i mogą korzystać z jego serwera MCP za pomocą własnego długoterminowego tokenu dostępu. Edytor nie ma własnych ról: każdy, kto z niego korzysta, może zmieniać projekt i programować urządzenia na magistrali KNX.",
           "requirements": "Pozostaw puste, aby użyć wersji edytora tej integracji. W przeciwnym razie adres URL lub ścieżka na hoście Home Assistant do innego pliku wymagań, np. aby wypróbować kompilację edytora."
         }
       }

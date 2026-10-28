@@ -7,7 +7,7 @@ them to the editor signed in with a session of the editor's own per browser sess
 itself accepts no other connections.
 
 MCP clients reach the editor's MCP server at MCP_URL, signed in with a long-lived access token of
-a Home Assistant administrator.
+a Home Assistant administrator (of every user when the options allow it).
 """
 
 from __future__ import annotations
@@ -146,8 +146,9 @@ class EditorProxyView(HomeAssistantView):
 
 class McpProxyView(HomeAssistantView):
     """The editor's MCP server at MCP_URL, for MCP clients signed in with a long-lived access token
-    of a Home Assistant administrator (Home Assistant checks the token). The proxy signs in to the
-    editor's MCP server with the token of the current editor run instead."""
+    of a Home Assistant administrator, or of every user when the option allow_non_admins opens the
+    editor to all (Home Assistant checks the token). The proxy signs in to the editor's MCP server
+    with the token of the current editor run instead."""
 
     name = "api:xknx_editor:mcp"
     url = MCP_URL
@@ -157,11 +158,13 @@ class McpProxyView(HomeAssistantView):
         self._managers = managers
 
     async def _handle(self, request: web.Request) -> web.StreamResponse:
-        if not request[KEY_HASS_USER].is_admin:
-            return web.json_response({"message": "Administrators only"}, status=403)
         manager = self._managers()
-        process = manager.process if manager is not None else None
-        if manager is None or process is None or not process.running:
+        if manager is None:
+            return web.json_response({"message": "XKNX Editor is not set up"}, status=503)
+        if not (request[KEY_HASS_USER].is_admin or manager.allow_non_admins):
+            return web.json_response({"message": "Administrators only"}, status=403)
+        process = manager.process
+        if process is None or not process.running:
             return web.json_response({"message": "XKNX Editor is not running"}, status=503)
         url = URL(process.mcp_endpoint)
         if request.query_string:

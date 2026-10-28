@@ -15,11 +15,11 @@
       "init": {
         "title": "Opciones de XKNX Editor",
         "data": {
-          "allow_non_admins": "Panel para todos los usuarios",
+          "allow_non_admins": "Editor para todos los usuarios",
           "requirements": "Archivo de requisitos"
         },
         "data_description": {
-          "allow_non_admins": "También los usuarios que no son administradores ven XKNX Editor en la barra lateral. El editor no tiene roles propios: cualquiera que lo abra puede modificar el proyecto y programar dispositivos en el bus KNX.",
+          "allow_non_admins": "También los usuarios que no son administradores ven XKNX Editor en la barra lateral y pueden usar su servidor MCP con su propio token de acceso de larga duración. El editor no tiene roles propios: cualquiera que lo use puede modificar el proyecto y programar dispositivos en el bus KNX.",
           "requirements": "Déjelo vacío para usar la versión del editor de esta integración. Si no, una URL o una ruta en el host de Home Assistant de otro archivo de requisitos, p. ej. para probar una compilación del editor."
         }
       }

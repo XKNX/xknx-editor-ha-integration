@@ -15,11 +15,11 @@
       "init": {
         "title": "Indstillinger for XKNX Editor",
         "data": {
-          "allow_non_admins": "Panel for alle brugere",
+          "allow_non_admins": "Editor for alle brugere",
           "requirements": "Requirements-fil"
         },
         "data_description": {
-          "allow_non_admins": "Også brugere, der ikke er administratorer, ser XKNX Editor i sidepanelet. Editoren har ingen egne roller: Alle, der åbner den, kan ændre projektet og programmere enheder på KNX-bussen.",
+          "allow_non_admins": "Også brugere, der ikke er administratorer, ser XKNX Editor i sidepanelet og kan bruge dens MCP-server med deres eget langtidsadgangstoken. Editoren har ingen egne roller: Alle, der bruger den, kan ændre projektet og programmere enheder på KNX-bussen.",
           "requirements": "Lad feltet være tomt for denne integrations editorversion. Ellers en URL eller en sti på Home Assistant-værten til en anden requirements-fil, f.eks. for at afprøve en editor-build."
         }
       }

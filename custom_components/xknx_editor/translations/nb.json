@@ -15,11 +15,11 @@
       "init": {
         "title": "Alternativer for XKNX Editor",
         "data": {
-          "allow_non_admins": "Panel for alle brukere",
+          "allow_non_admins": "Editor for alle brukere",
           "requirements": "Requirements-fil"
         },
         "data_description": {
-          "allow_non_admins": "Også brukere som ikke er administratorer, ser XKNX Editor i sidepanelet. Editoren har ingen egne roller: Alle som åpner den, kan endre prosjektet og programmere enheter på KNX-bussen.",
+          "allow_non_admins": "Også brukere som ikke er administratorer, ser XKNX Editor i sidepanelet og kan bruke MCP-serveren med sitt eget langtidstilgangstoken. Editoren har ingen egne roller: Alle som bruker den, kan endre prosjektet og programmere enheter på KNX-bussen.",
           "requirements": "La feltet stå tomt for editorversjonen til denne integrasjonen. Ellers en URL eller en sti på Home Assistant-verten til en annen requirements-fil, f.eks. for å prøve en editor-build."
         }
       }

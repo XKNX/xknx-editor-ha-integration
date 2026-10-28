@@ -362,6 +362,33 @@ async def test_mcp_only_for_administrators(
     assert editor.seen == []
 
 
+@pytest.mark.parametrize("options", [{CONF_ALLOW_NON_ADMINS: True}])
+async def test_mcp_for_every_user_with_the_option(
+    hass: HomeAssistant,
+    manager: EditorManager,
+    editor: FakeEditor,
+    hass_client: ClientSessionGenerator,
+    hass_read_only_access_token: str,
+) -> None:
+    client = await hass_client(hass_read_only_access_token)
+    response = await client.post(MCP_URL, data=b'{"method":"tools/list"}')
+    assert response.status == 200
+    assert await response.text() == 'event: message\ndata: {"method":"tools/list"}\n\n'
+    assert editor.seen[-1]["Authorization"] == f"Bearer {editor.mcp_token}"
+
+
+async def test_mcp_without_the_integration(
+    hass: HomeAssistant, manager: EditorManager, hass_client: ClientSessionGenerator
+) -> None:
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    with patch.object(EditorManager, "async_stop"):
+        assert await hass.config_entries.async_unload(entry.entry_id)
+    client = await hass_client()
+    response = await client.post(MCP_URL, data=b"{}")
+    assert response.status == 503
+    assert await response.json() == {"message": "XKNX Editor is not set up"}
+
+
 async def test_mcp_while_the_editor_is_not_running(
     hass: HomeAssistant, manager: EditorManager, hass_client: ClientSessionGenerator
 ) -> None:
