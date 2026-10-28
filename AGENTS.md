@@ -21,6 +21,7 @@ A Home Assistant custom integration (domain `xknx_editor`) that runs the [XKNX E
 ```bash
 uv venv --python 3.14 && uv pip install -r requirements_test.txt   # Test environment
 .venv/bin/pytest           # Tests (Linux or macOS: Home Assistant's test fixtures need fcntl)
+.venv/bin/pytest --cov     # Tests with coverage (CI uploads it to Codecov, PRs are not checked yet)
 uvx ruff check             # Lint
 uvx ruff format            # Format
 ```
