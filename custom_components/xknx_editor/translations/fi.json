@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "XKNX Editor",
+        "description": "XKNX Editor, KNX-projektieditori, näkyy järjestelmänvalvojille sivupalkissa. Ensimmäisellä käynnistyskerralla se asentaa itsensä omaan ympäristöönsä Home Assistantin asetuskansioon. Se kestää muutaman minuutin ja vaatii internetyhteyden."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "XKNX Editor on jo määritetty."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "XKNX Editorin asetukset",
+        "data": {
+          "requirements": "Vaatimustiedosto"
+        },
+        "data_description": {
+          "requirements": "Jätä tyhjäksi, jos haluat tämän integraation editoriversion. Muuten toisen vaatimustiedoston URL-osoite tai polku Home Assistant -isännällä, esimerkiksi editorin koontiversion kokeilemiseksi."
+        }
+      }
+    }
+  },
+  "issues": {
+    "not_running": {
+      "title": "XKNX Editor ei ole käynnissä",
+      "description": "{status}\n\n```\n{detail}\n```\n\nIntegraatio yrittää automaattisesti uudelleen. Sen diagnostiikkatiedot sisältävät lisätietoja vikailmoitusta varten."
+    }
+  }
+}

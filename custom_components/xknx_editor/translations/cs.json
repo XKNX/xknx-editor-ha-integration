@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "XKNX Editor",
+        "description": "XKNX Editor, editor projektů KNX, se administrátorům zobrazí v postranním panelu. Při prvním spuštění se nainstaluje do vlastního prostředí ve složce konfigurace Home Assistant. Trvá to několik minut a vyžaduje přístup k internetu."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "XKNX Editor je již nastaven."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Možnosti XKNX Editor",
+        "data": {
+          "requirements": "Soubor požadavků"
+        },
+        "data_description": {
+          "requirements": "Ponechte prázdné pro verzi editoru této integrace. Jinak URL nebo cesta na hostiteli Home Assistant k jinému souboru požadavků, např. pro vyzkoušení sestavení editoru."
+        }
+      }
+    }
+  },
+  "issues": {
+    "not_running": {
+      "title": "XKNX Editor neběží",
+      "description": "{status}\n\n```\n{detail}\n```\n\nIntegrace to automaticky zkusí znovu. Její diagnostická data obsahují další podrobnosti pro hlášení chyby."
+    }
+  }
+}

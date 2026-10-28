@@ -9,9 +9,10 @@ from pathlib import Path
 
 import aiohttp
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DATA_FOLDER, EDITOR_VERSION, ENVIRONMENT_FOLDER
+from .const import DATA_FOLDER, DOMAIN, EDITOR_VERSION, ENVIRONMENT_FOLDER
 from .environment import EditorEnvironment, InstallError
 from .process import EditorProcess, StartError
 from .proxy import Sessions
@@ -22,6 +23,9 @@ _LOGGER = logging.getLogger(__name__)
 _RESTART_DELAYS = (5, 30, 120, 600)
 # A run this long resets the waits.
 _STABLE_RUN = 600.0
+# The repair issue while the editor does not run, and how much of the cause it shows.
+ISSUE_NOT_RUNNING = "not_running"
+_ISSUE_DETAIL = 500
 
 
 class EditorManager:
@@ -56,6 +60,7 @@ class EditorManager:
             try:
                 await self._async_start()
                 self.status, self.detail = "Running", ""
+                ir.async_delete_issue(self.hass, DOMAIN, ISSUE_NOT_RUNNING)
                 code = await self.process.async_wait() if self.process else 0
                 if self._stopping:
                     break
@@ -65,12 +70,28 @@ class EditorManager:
             except (InstallError, StartError) as error:
                 self.status, self.detail = "Failed to start", str(error)
                 _LOGGER.error("XKNX Editor could not start: %s", error)
+            self._report_not_running()
             if asyncio.get_running_loop().time() - started > _STABLE_RUN:
                 failures = 0
             delay = _RESTART_DELAYS[min(failures, len(_RESTART_DELAYS) - 1)]
             failures += 1
             self.status += f" (next try in {delay} s)"
             await asyncio.sleep(delay)
+
+    def _report_not_running(self) -> None:
+        """A repair issue with the cause, until the editor runs again."""
+        detail = self.detail.strip()
+        if len(detail) > _ISSUE_DETAIL:
+            detail = "…" + detail[-_ISSUE_DETAIL:]
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            ISSUE_NOT_RUNNING,
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=ISSUE_NOT_RUNNING,
+            translation_placeholders={"status": self.status, "detail": detail},
+        )
 
     async def _async_start(self) -> None:
         self._progress(f"Installing XKNX Editor {EDITOR_VERSION}")
@@ -91,6 +112,7 @@ class EditorManager:
 
     async def async_stop(self) -> None:
         self._stopping = True
+        ir.async_delete_issue(self.hass, DOMAIN, ISSUE_NOT_RUNNING)
         if self.process is not None:
             await self.process.async_stop()
         await self.client.close()

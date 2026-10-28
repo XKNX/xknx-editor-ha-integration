@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "XKNX Editor",
+        "description": "XKNX Editor, edytor projektów KNX, pojawia się na pasku bocznym administratorów. Przy pierwszym uruchomieniu instaluje się we własnym środowisku w folderze konfiguracji Home Assistant. Trwa to kilka minut i wymaga dostępu do internetu."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "XKNX Editor jest już skonfigurowany."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje XKNX Editor",
+        "data": {
+          "requirements": "Plik wymagań"
+        },
+        "data_description": {
+          "requirements": "Pozostaw puste, aby użyć wersji edytora tej integracji. W przeciwnym razie adres URL lub ścieżka na hoście Home Assistant do innego pliku wymagań, np. aby wypróbować kompilację edytora."
+        }
+      }
+    }
+  },
+  "issues": {
+    "not_running": {
+      "title": "XKNX Editor nie działa",
+      "description": "{status}\n\n```\n{detail}\n```\n\nIntegracja automatycznie spróbuje ponownie. Jej dane diagnostyczne zawierają więcej szczegółów do zgłoszenia problemu."
+    }
+  }
+}

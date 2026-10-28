@@ -13,7 +13,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "XKNX Editor Optionen",
+        "title": "Optionen für XKNX Editor",
         "data": {
           "requirements": "Requirements-Datei"
         },
@@ -21,6 +21,12 @@
           "requirements": "Leer lassen für die Editor-Version dieser Integration. Sonst die URL oder ein Pfad auf dem Home-Assistant-Host einer anderen Requirements-Datei, z. B. um einen Editor-Build auszuprobieren."
         }
       }
+    }
+  },
+  "issues": {
+    "not_running": {
+      "title": "XKNX Editor läuft nicht",
+      "description": "{status}\n\n```\n{detail}\n```\n\nDie Integration versucht es von selbst erneut. Ihre Diagnosedaten enthalten weitere Details für eine Fehlermeldung."
     }
   }
 }

@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "XKNX Editor",
+        "description": "XKNX Editor, KNX-projektredigeraren, visas i sidofältet för administratörer. Vid första start installerar den sig själv i en egen miljö i Home Assistants konfigurationsmapp. Det tar några minuter och kräver internetåtkomst."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "XKNX Editor är redan konfigurerad."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Alternativ för XKNX Editor",
+        "data": {
+          "requirements": "Requirements-fil"
+        },
+        "data_description": {
+          "requirements": "Lämna tomt för den här integrationens editorversion. Annars en URL eller en sökväg på Home Assistant-värden till en annan requirements-fil, t.ex. för att prova en editor-build."
+        }
+      }
+    }
+  },
+  "issues": {
+    "not_running": {
+      "title": "XKNX Editor körs inte",
+      "description": "{status}\n\n```\n{detail}\n```\n\nIntegrationen försöker igen automatiskt. Dess diagnostikdata innehåller fler detaljer för en felrapport."
+    }
+  }
+}

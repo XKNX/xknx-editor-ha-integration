@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "XKNX Editor",
+        "description": "KNX プロジェクトエディター XKNX Editor が、管理者のサイドバーに表示されます。初回起動時に、Home Assistant の設定フォルダー内の専用環境に自身をインストールします。数分かかり、インターネット接続が必要です。"
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "XKNX Editor はすでに設定されています。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "XKNX Editor のオプション",
+        "data": {
+          "requirements": "要件ファイル"
+        },
+        "data_description": {
+          "requirements": "空欄にすると、この統合に対応するエディターのリリースを使用します。それ以外の場合は、別の要件ファイルの URL または Home Assistant ホスト上のパスを指定します（例: エディターのビルドを試す場合）。"
+        }
+      }
+    }
+  },
+  "issues": {
+    "not_running": {
+      "title": "XKNX Editor が実行されていません",
+      "description": "{status}\n\n```\n{detail}\n```\n\n統合は自動的に再試行します。診断データには、問題報告に役立つ詳細が含まれています。"
+    }
+  }
+}

@@ -66,7 +66,8 @@ class EditorEnvironment:
             return self.venv / "Scripts" / "python.exe"
         return self.venv / "bin" / "python"
 
-    def _state(self) -> dict[str, str]:
+    def state(self) -> dict[str, str]:
+        """What the environment was last made for (see async_ensure)."""
         try:
             state = json.loads(self._state_file.read_text(encoding="utf-8"))
         except OSError, ValueError:
@@ -99,7 +100,7 @@ class EditorEnvironment:
             "python": python_tag(),
             "requirements": hashlib.sha256(requirements.encode("utf-8")).hexdigest(),
         }
-        state = await asyncio.to_thread(self._state)
+        state = await asyncio.to_thread(self.state)
         exists = await asyncio.to_thread(self.python.exists)
         if exists and state == wanted:
             return self.python

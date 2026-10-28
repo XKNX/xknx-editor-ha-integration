@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "XKNX Editor",
+        "description": "KNX proje düzenleyicisi XKNX Editor, yöneticiler için kenar çubuğunda görünür. İlk başlatmada kendini Home Assistant yapılandırma klasöründeki kendi ortamına kurar. Bu birkaç dakika sürer ve internet erişimi gerektirir."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "XKNX Editor zaten kurulu."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "XKNX Editor seçenekleri",
+        "data": {
+          "requirements": "Gereksinim dosyası"
+        },
+        "data_description": {
+          "requirements": "Bu entegrasyonun düzenleyici sürümü için boş bırakın. Aksi halde başka bir gereksinim dosyasının URL’si veya Home Assistant ana bilgisayarındaki yolu, ör. bir düzenleyici derlemesini denemek için."
+        }
+      }
+    }
+  },
+  "issues": {
+    "not_running": {
+      "title": "XKNX Editor çalışmıyor",
+      "description": "{status}\n\n```\n{detail}\n```\n\nEntegrasyon otomatik olarak yeniden dener. Tanılama verileri, bir hata bildirimi için daha fazla ayrıntı içerir."
+    }
+  }
+}

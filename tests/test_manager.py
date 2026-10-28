@@ -4,10 +4,12 @@ from collections import deque
 from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 
 from custom_components.xknx_editor import manager as manager_module
+from custom_components.xknx_editor.const import DOMAIN
 from custom_components.xknx_editor.environment import InstallError
-from custom_components.xknx_editor.manager import EditorManager
+from custom_components.xknx_editor.manager import ISSUE_NOT_RUNNING, EditorManager
 
 
 class EndingProcess:
@@ -95,3 +97,42 @@ async def test_stop_ends_the_watch(hass: HomeAssistant) -> None:
         await manager.async_run()
     assert stopped
     assert manager.client.closed
+
+
+async def test_repair_issue_while_not_running(hass: HomeAssistant) -> None:
+    manager = EditorManager(hass, password="x", requirements="r.txt")
+    registry = ir.async_get(hass)
+    attempts = 0
+    seen: list[ir.IssueEntry | None] = []
+
+    async def start() -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise InstallError("x" * 2000)
+        manager.process = EndingProcess(0)  # type: ignore[assignment]
+
+        async def wait() -> int:
+            # Running: the issue is gone.
+            seen.append(registry.async_get_issue(DOMAIN, ISSUE_NOT_RUNNING))
+            await manager.async_stop()
+            return 0
+
+        manager.process.async_wait = wait  # type: ignore[method-assign]
+
+    async def sleep(delay: float) -> None:
+        seen.append(registry.async_get_issue(DOMAIN, ISSUE_NOT_RUNNING))
+
+    with (
+        patch.object(manager, "_async_start", start),
+        patch.object(manager_module.asyncio, "sleep", sleep),
+    ):
+        await manager.async_run()
+    issue = seen[0]
+    assert issue is not None
+    assert issue.severity is ir.IssueSeverity.ERROR
+    assert issue.translation_placeholders is not None
+    assert issue.translation_placeholders["status"] == "Failed to start"
+    # A long cause is shortened to its end.
+    assert issue.translation_placeholders["detail"] == "…" + "x" * 500
+    assert seen[1] is None

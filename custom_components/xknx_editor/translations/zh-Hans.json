@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "XKNX Editor",
+        "description": "XKNX Editor（KNX 项目编辑器）会显示在管理员的侧边栏中。首次启动时，它会将自身安装到 Home Assistant 配置文件夹中的独立环境里，这需要几分钟时间，并且需要联网。"
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "XKNX Editor 已设置。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "XKNX Editor 选项",
+        "data": {
+          "requirements": "依赖文件"
+        },
+        "data_description": {
+          "requirements": "留空则使用此集成对应的编辑器版本。否则填写另一个依赖文件的 URL 或其在 Home Assistant 主机上的路径，例如用于试用某个编辑器构建。"
+        }
+      }
+    }
+  },
+  "issues": {
+    "not_running": {
+      "title": "XKNX Editor 未运行",
+      "description": "{status}\n\n```\n{detail}\n```\n\n集成会自动重试。其诊断信息包含更多可用于问题报告的详细信息。"
+    }
+  }
+}
