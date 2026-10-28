@@ -1,0 +1,55 @@
+name: Problem with the Integration
+description: XKNX Editor does not install, start or open in Home Assistant.
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        This is for the integration that runs XKNX Editor in Home Assistant. Problems in the
+        editor itself (projects, downloads, the bus) belong to the
+        [editor's issues](https://github.com/XKNX/xknx-editor/issues).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What Happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: integration
+    attributes:
+      label: Integration Version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: homeassistant
+    attributes:
+      label: Home Assistant Version
+      placeholder: "2026.11.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation Type
+      options:
+        - Home Assistant OS
+        - Home Assistant Container
+        - Home Assistant Supervised
+        - Home Assistant Core
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: >-
+        Settings > Devices & services > XKNX Editor > (menu) > Download diagnostics, then drop
+        the file here. It contains the editor's status and its last output, no passwords.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log Lines
+      description: Lines of Home Assistant's log that mention xknx_editor.
+      render: text
