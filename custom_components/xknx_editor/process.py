@@ -129,8 +129,9 @@ class EditorProcess:
             f"--web-files={self._files}",
             "--web-no-browser",
             "--web-no-tray",
-            # Inside Home Assistant: no update check and no File > Exit in the editor.
-            "--home-assistant=integration",
+            # Inside Home Assistant: a new version is only announced (Home Assistant updates the
+            # editor with the integration).
+            "--home-assistant",
             # The MCP server, reachable through Home Assistant only (proxy.McpProxyView).
             f"--mcp={HOST}:{self.mcp_port}",
             *mcp_url,

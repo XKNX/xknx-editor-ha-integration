@@ -71,7 +71,7 @@ async def test_start_and_stop(editor: EditorProcess, tmp_path: Path, monkeypatch
     assert f"--web-files={tmp_path / 'data' / 'files'}" in seen["argv"]
     assert seen["password"] == "secret"
     # Inside Home Assistant, with the MCP server on a port of its own and its token.
-    assert "--home-assistant=integration" in seen["argv"]
+    assert "--home-assistant" in seen["argv"]
     assert f"--mcp=127.0.0.1:{editor.mcp_port}" in seen["argv"]
     assert editor.mcp_port not in (0, editor.port)
     assert editor.mcp_endpoint == f"http://127.0.0.1:{editor.mcp_port}/mcp"
