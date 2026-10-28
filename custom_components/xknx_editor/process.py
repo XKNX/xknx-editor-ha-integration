@@ -48,7 +48,9 @@ class EditorProcess:
 
     ``data`` holds the editor's settings and catalog, ``files`` is the folder its file dialogs
     work in, ``cache`` its downloads. Browsers never reach the editor directly: it accepts only
-    signed-in sessions, and only the proxy knows ``password``.
+    signed-in sessions, and only the proxy knows ``password``. Its MCP server runs on a port of
+    its own, with ``mcp_token`` that only the proxy knows; ``mcp_url`` is the address MCP clients
+    use through Home Assistant, which the editor shows.
     """
 
     def __init__(
@@ -59,21 +61,31 @@ class EditorProcess:
         files: Path,
         cache: Path,
         password: str,
+        mcp_token: str,
+        mcp_url: str | None = None,
     ) -> None:
         self._python = python
         self._data = data
         self._files = files
         self._cache = cache
         self._password = password
+        self.mcp_token = mcp_token
+        self._mcp_url = mcp_url
         self._process: asyncio.subprocess.Process | None = None
         self._reader: asyncio.Task[None] | None = None
         # The last lines the editor wrote, for the message when it fails.
         self.output: deque[str] = deque(maxlen=40)
         self.port = 0
+        self.mcp_port = 0
 
     @property
     def url(self) -> str:
         return f"http://{HOST}:{self.port}/"
+
+    @property
+    def mcp_endpoint(self) -> str:
+        """The editor's MCP endpoint."""
+        return f"http://{HOST}:{self.mcp_port}/mcp"
 
     @property
     def running(self) -> bool:
@@ -87,6 +99,7 @@ class EditorProcess:
             XDG_STATE_HOME=str(self._data / "state"),
             XDG_CACHE_HOME=str(self._cache),
             XKNX_WEB_PASSWORD=self._password,
+            XKNX_MCP_AUTH_TOKEN=self.mcp_token,
             PYTHONUNBUFFERED="1",
             NO_COLOR="1",
         )
@@ -97,7 +110,9 @@ class EditorProcess:
         for folder in (self._data, self._files, self._cache):
             await asyncio.to_thread(folder.mkdir, parents=True, exist_ok=True)
         self.port = free_port()
+        self.mcp_port = free_port()
         self.output.clear()
+        mcp_url = [f"--mcp-url={self._mcp_url}"] if self._mcp_url else []
         self._process = await asyncio.create_subprocess_exec(
             str(self._python),
             "-m",
@@ -107,6 +122,11 @@ class EditorProcess:
             f"--web-files={self._files}",
             "--web-no-browser",
             "--web-no-tray",
+            # Inside Home Assistant: no update check and no File > Exit in the editor.
+            "--home-assistant=integration",
+            # The MCP server, reachable through Home Assistant only (proxy.McpProxyView).
+            f"--mcp={HOST}:{self.mcp_port}",
+            *mcp_url,
             env=self._environment(),
             cwd=str(self._data),
             stdin=asyncio.subprocess.DEVNULL,

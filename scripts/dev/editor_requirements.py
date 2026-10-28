@@ -15,9 +15,9 @@ import sys
 from pathlib import Path
 
 repo, xknxproject, out, base_url = (
-    Path(sys.argv[1]),
-    Path(sys.argv[2]),
-    Path(sys.argv[3]),
+    Path(sys.argv[1]).resolve(),
+    Path(sys.argv[2]).resolve(),
+    Path(sys.argv[3]).resolve(),
     sys.argv[4].rstrip("/"),
 )
 out.mkdir(parents=True, exist_ok=True)

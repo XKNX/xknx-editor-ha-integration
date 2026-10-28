@@ -18,6 +18,7 @@ from custom_components.xknx_editor.const import (
     CONF_EDITOR_PASSWORD,
     DOMAIN,
     EDITOR_COOKIE,
+    MCP_URL,
     SESSION_COOKIE,
     UI_URL,
 )
@@ -45,6 +46,26 @@ class FakeEditor:
         return str(self.server.make_url("/"))
 
     running = True
+    mcp_token = "editor-mcp-token"
+
+    @property
+    def mcp_endpoint(self) -> str:
+        assert self.server is not None
+        return str(self.server.make_url("/mcp"))
+
+    async def mcp(self, request: web.Request) -> web.StreamResponse:
+        """The editor's MCP server: its own token only; answers as an event stream in parts."""
+        self.seen.append(dict(request.headers))
+        if request.headers.get("Authorization") != f"Bearer {self.mcp_token}":
+            return web.json_response({"error": "invalid_token"}, status=401)
+        body = await request.read()
+        response = web.StreamResponse(
+            headers={"Content-Type": "text/event-stream", "Mcp-Session-Id": "s1"}
+        )
+        await response.prepare(request)
+        await response.write(b"event: message\n")
+        await response.write(b"data: " + (body or request.method.encode()) + b"\n\n")
+        return response
 
     def _signed_in(self, request: web.Request) -> bool:
         return request.cookies.get(EDITOR_COOKIE, "").startswith("session-")
@@ -93,6 +114,7 @@ async def editor(hass: HomeAssistant) -> AsyncGenerator[FakeEditor]:
     app.router.add_get("/", fake.index)
     app.router.add_post("/upload", fake.upload)
     app.router.add_get("/ws", fake.socket)
+    app.router.add_route("*", "/mcp", fake.mcp)
     fake.server = TestServer(app)
     await fake.server.start_server()
     yield fake
@@ -297,3 +319,54 @@ async def test_panel_while_loaded(hass: HomeAssistant, manager: EditorManager) -
         assert await hass.config_entries.async_unload(entry.entry_id)
     stop.assert_awaited_once()
     assert "xknx-editor" not in panels
+
+
+async def test_mcp_through_home_assistant(
+    hass: HomeAssistant,
+    manager: EditorManager,
+    editor: FakeEditor,
+    hass_client: ClientSessionGenerator,
+    hass_client_no_auth: ClientSessionGenerator,
+) -> None:
+    # Without a Home Assistant token, Home Assistant answers itself.
+    client = await hass_client_no_auth()
+    assert (await client.post(MCP_URL, data=b"{}")).status == 401
+    assert editor.seen == []
+
+    client = await hass_client()
+    response = await client.post(
+        MCP_URL, data=b'{"method":"initialize"}', headers={"Accept": "text/event-stream"}
+    )
+    assert response.status == 200
+    assert response.headers["Mcp-Session-Id"] == "s1"
+    assert await response.text() == 'event: message\ndata: {"method":"initialize"}\n\n'
+    # The editor gets its own token, not the Home Assistant token.
+    assert editor.seen[-1]["Authorization"] == f"Bearer {editor.mcp_token}"
+    assert editor.seen[-1]["Host"].startswith("127.0.0.1:")
+    # Ending the MCP session.
+    response = await client.delete(MCP_URL, headers={"Mcp-Session-Id": "s1"})
+    assert await response.text() == "event: message\ndata: DELETE\n\n"
+    assert editor.seen[-1]["Mcp-Session-Id"] == "s1"
+
+
+async def test_mcp_only_for_administrators(
+    hass: HomeAssistant,
+    manager: EditorManager,
+    editor: FakeEditor,
+    hass_client: ClientSessionGenerator,
+    hass_read_only_access_token: str,
+) -> None:
+    client = await hass_client(hass_read_only_access_token)
+    response = await client.post(MCP_URL, data=b"{}")
+    assert response.status == 403
+    assert editor.seen == []
+
+
+async def test_mcp_while_the_editor_is_not_running(
+    hass: HomeAssistant, manager: EditorManager, hass_client: ClientSessionGenerator
+) -> None:
+    manager.process = None
+    client = await hass_client()
+    response = await client.post(MCP_URL, data=b"{}")
+    assert response.status == 503
+    assert await response.json() == {"message": "XKNX Editor is not running"}

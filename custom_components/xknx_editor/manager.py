@@ -5,14 +5,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 from pathlib import Path
 
 import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.network import NoURLAvailableError, get_url
 
-from .const import DATA_FOLDER, DOMAIN, EDITOR_VERSION, ENVIRONMENT_FOLDER
+from .const import DATA_FOLDER, DOMAIN, EDITOR_VERSION, ENVIRONMENT_FOLDER, MCP_URL
 from .environment import EditorEnvironment, InstallError
 from .process import EditorProcess, StartError
 from .proxy import Sessions
@@ -102,6 +104,15 @@ class EditorManager:
             translation_placeholders={"status": self.status, "detail": detail},
         )
 
+    def _mcp_url(self) -> str | None:
+        """The address MCP clients use: Home Assistant's own (the external one when it has one),
+        with the MCP proxy's path; None when Home Assistant knows no address of its own."""
+        try:
+            base = get_url(self.hass, prefer_external=True)
+        except NoURLAvailableError:
+            return None
+        return base.rstrip("/") + MCP_URL
+
     async def _async_start(self) -> None:
         self._progress(f"Installing XKNX Editor {EDITOR_VERSION}")
         requirements = await self.environment.async_requirements(
@@ -115,6 +126,9 @@ class EditorManager:
             files=Path(self.hass.config.path(DATA_FOLDER, "files")),
             cache=self.environment.root / "cache",
             password=self.password,
+            # Only the proxy signs in to the MCP server; a new token for every run.
+            mcp_token=secrets.token_urlsafe(32),
+            mcp_url=self._mcp_url(),
         )
         self.run += 1
         await self.process.async_start(self.client)

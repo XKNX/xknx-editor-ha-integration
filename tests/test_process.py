@@ -17,6 +17,7 @@ web = next(a for a in sys.argv if a.startswith("--web="))[6:]
 host, port = web.rsplit(":", 1)
 with open("seen.json", "w") as f:
     json.dump({"argv": sys.argv[1:], "password": os.environ.get("XKNX_WEB_PASSWORD"),
+               "mcp_token": os.environ.get("XKNX_MCP_AUTH_TOKEN"),
                "data": os.environ.get("XDG_DATA_HOME"), "cache": os.environ.get("XDG_CACHE_HOME"),
                "pythonpath": os.environ.get("PYTHONPATH")}, f)
 if os.environ.get("FAKE_FAIL"):
@@ -49,6 +50,8 @@ def editor(tmp_path: Path) -> EditorProcess:
         files=tmp_path / "data" / "files",
         cache=tmp_path / "cache",
         password="secret",
+        mcp_token="mcp-secret",
+        mcp_url="https://ha.example/api/xknx_editor/mcp",
     )
 
 
@@ -64,6 +67,13 @@ async def test_start_and_stop(editor: EditorProcess, tmp_path: Path, monkeypatch
     assert "--web-proxy-ip=127.0.0.1" in seen["argv"]
     assert f"--web-files={tmp_path / 'data' / 'files'}" in seen["argv"]
     assert seen["password"] == "secret"
+    # Inside Home Assistant, with the MCP server on a port of its own and its token.
+    assert "--home-assistant=integration" in seen["argv"]
+    assert f"--mcp=127.0.0.1:{editor.mcp_port}" in seen["argv"]
+    assert editor.mcp_port not in (0, editor.port)
+    assert editor.mcp_endpoint == f"http://127.0.0.1:{editor.mcp_port}/mcp"
+    assert "--mcp-url=https://ha.example/api/xknx_editor/mcp" in seen["argv"]
+    assert seen["mcp_token"] == "mcp-secret"
     assert seen["data"] == str(tmp_path / "data" / "data")
     assert seen["cache"] == str(tmp_path / "cache")
     # Home Assistant's module path does not reach the editor.

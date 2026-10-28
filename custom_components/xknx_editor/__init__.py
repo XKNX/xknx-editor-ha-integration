@@ -32,7 +32,7 @@ from .const import (
     STATIC_URL,
 )
 from .manager import EditorManager
-from .proxy import EditorProxyView
+from .proxy import EditorProxyView, McpProxyView
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -45,9 +45,10 @@ def _manager(hass: HomeAssistant) -> EditorManager | None:
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register what lives as long as Home Assistant: the proxy, the panel script and the
-    websocket commands."""
+    """Register what lives as long as Home Assistant: the proxies of the UI and of MCP, the panel
+    script and the websocket commands."""
     hass.http.register_view(EditorProxyView(lambda: _manager(hass)))
+    hass.http.register_view(McpProxyView(lambda: _manager(hass)))
     await hass.http.async_register_static_paths(
         [StaticPathConfig(STATIC_URL, str(Path(__file__).parent / "frontend"), False)]
     )

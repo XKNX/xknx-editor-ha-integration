@@ -1,9 +1,13 @@
 """Home Assistant's way to the editor: signed-in users reach its web UI below UI_URL.
 
 Like the Ingress of Home Assistant apps, the panel asks for a session over Home Assistant's
-websocket (only administrators get one) and stores it in a cookie valid below URL_BASE. The proxy
-answers only requests with a live session, and forwards them to the editor signed in with a
-session of the editor's own per browser session. The editor itself accepts no other connections.
+websocket (administrators get one, every user when the options allow it) and stores it in a
+cookie valid below URL_BASE. The proxy answers only requests with a live session, and forwards
+them to the editor signed in with a session of the editor's own per browser session. The editor
+itself accepts no other connections.
+
+MCP clients reach the editor's MCP server at MCP_URL, signed in with a long-lived access token of
+a Home Assistant administrator.
 """
 
 from __future__ import annotations
@@ -21,11 +25,11 @@ from urllib.parse import quote
 
 import aiohttp
 from aiohttp import ClientTimeout, hdrs, web
-from homeassistant.components.http import HomeAssistantView
+from homeassistant.components.http import KEY_HASS_USER, HomeAssistantView
 from multidict import CIMultiDict
 from yarl import URL
 
-from .const import EDITOR_COOKIE, SESSION_COOKIE, SESSION_TIMEOUT, UI_URL
+from .const import EDITOR_COOKIE, MCP_URL, SESSION_COOKIE, SESSION_TIMEOUT, UI_URL
 
 if TYPE_CHECKING:
     from .manager import EditorManager
@@ -138,6 +142,45 @@ class EditorProxyView(HomeAssistantView):
     get = _handle
     post = _handle
     head = _handle
+
+
+class McpProxyView(HomeAssistantView):
+    """The editor's MCP server at MCP_URL, for MCP clients signed in with a long-lived access token
+    of a Home Assistant administrator (Home Assistant checks the token). The proxy signs in to the
+    editor's MCP server with the token of the current editor run instead."""
+
+    name = "api:xknx_editor:mcp"
+    url = MCP_URL
+    requires_auth = True
+
+    def __init__(self, managers: Callable[[], EditorManager | None]) -> None:
+        self._managers = managers
+
+    async def _handle(self, request: web.Request) -> web.StreamResponse:
+        if not request[KEY_HASS_USER].is_admin:
+            return web.json_response({"message": "Administrators only"}, status=403)
+        manager = self._managers()
+        process = manager.process if manager is not None else None
+        if manager is None or process is None or not process.running:
+            return web.json_response({"message": "XKNX Editor is not running"}, status=503)
+        url = URL(process.mcp_endpoint)
+        if request.query_string:
+            url = url.with_query(request.query_string)
+        headers = CIMultiDict(
+            (name, value)
+            for name, value in request.headers.items()
+            if name not in _REQUEST_HEADERS_FILTER
+        )
+        headers[hdrs.AUTHORIZATION] = f"Bearer {process.mcp_token}"
+        try:
+            return await _request(manager, request, url, headers)
+        except aiohttp.ClientError as error:
+            _LOGGER.debug("MCP proxy error: %s", error)
+            return web.json_response({"message": "XKNX Editor did not answer"}, status=502)
+
+    get = _handle
+    post = _handle
+    delete = _handle
 
 
 async def _editor_cookie(manager: EditorManager, session: _Session) -> str:

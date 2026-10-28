@@ -35,6 +35,8 @@ This onboards Home Assistant (user `dev`, password `dev-password`) and adds XKNX
 ## Checks
 
 - **Panel:** `uv run --with playwright scripts/dev/check_panel.py .dev/shots` takes screenshots of the panel at desktop and phone size.
+- **MCP:** `python scripts/dev/check_mcp.py` talks MCP to the editor through Home Assistant (initialize, list the tools, call one).
+- **Restart:** `wsl -d HomeAssistantDev -u root -- sh scripts/dev/stop_ha.sh`, then `run_ha.sh` again, loads changed integration code.
 - **Tests and hassfest** on the image's Home Assistant (WSL): `setup_tests.sh` once, then `run_tests.sh` and `hassfest.sh`:
 
   ```bash

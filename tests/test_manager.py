@@ -136,3 +136,12 @@ async def test_repair_issue_while_not_running(hass: HomeAssistant) -> None:
     # A long cause is shortened to its end.
     assert issue.translation_placeholders["detail"] == "…" + "x" * 500
     assert seen[1] is None
+
+
+async def test_mcp_address_is_home_assistants(hass: HomeAssistant) -> None:
+    manager = EditorManager(hass, password="x", requirements="r.txt")
+    await hass.config.async_update(external_url="https://ha.example:8123")
+    assert manager._mcp_url() == "https://ha.example:8123/api/xknx_editor/mcp"
+    with patch.object(manager_module, "get_url", side_effect=manager_module.NoURLAvailableError):
+        assert manager._mcp_url() is None
+    await manager.client.close()

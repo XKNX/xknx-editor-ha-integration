@@ -4,6 +4,7 @@ Assistant host, e.g. from editor_requirements.py). Tokens go to .dev/ of the rep
 
 import json
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -35,7 +36,13 @@ def call(
         return json.loads(text) if text else None
 
 
-steps = {s["step"]: s["done"] for s in call("GET", "/api/onboarding")}  # type: ignore[union-attr]
+try:
+    steps = {s["step"]: s["done"] for s in call("GET", "/api/onboarding")}  # type: ignore[union-attr]
+except urllib.error.HTTPError as error:
+    # After a restart, an onboarded Home Assistant has no onboarding API any more.
+    if error.code != 404:
+        raise
+    steps = {"user": True}
 if not steps.get("user"):
     code = call(
         "POST",

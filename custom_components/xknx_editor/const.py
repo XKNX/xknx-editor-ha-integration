@@ -29,6 +29,8 @@ DATA_FOLDER: Final = "xknx_editor"
 
 URL_BASE: Final = "/api/xknx_editor"
 UI_URL: Final = f"{URL_BASE}/ui/"
+# The editor's MCP server, for MCP clients signed in with a Home Assistant access token.
+MCP_URL: Final = f"{URL_BASE}/mcp"
 STATIC_URL: Final = "/xknx_editor_static"
 PANEL_URL_PATH: Final = "xknx-editor"
 PANEL_TITLE: Final = "XKNX Editor"

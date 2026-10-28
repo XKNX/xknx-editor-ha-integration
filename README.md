@@ -24,6 +24,17 @@ On its first start, the integration installs the editor into an environment of i
 
 The editor connects to your KNX/IP interface or router itself, next to Home Assistant's KNX integration, so the interface needs a free tunnel. Searching for interfaces and KNX/IP routing (multicast) need Home Assistant's network: with Home Assistant Container, run it with `network_mode: host`.
 
+## AI Assistants (MCP)
+
+The editor's MCP server lets AI assistants such as Claude or Codex read and edit the project. In Home Assistant it's reachable through Home Assistant itself, at `https://<your Home Assistant>/api/xknx_editor/mcp`, so it uses Home Assistant's HTTPS and remote access and needs no port of its own. AI tools sign in with a long-lived access token of a Home Assistant administrator (your profile > **Security** > **Long-lived access tokens**), for example:
+
+```bash
+claude mcp add --transport http xknx-editor https://<your Home Assistant>/api/xknx_editor/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
+The editor's **AI MCP** tab shows the address and the commands for Claude Code and Codex.
+
 ## Options
 
 Under the integration's **Configure**:
