@@ -18,6 +18,7 @@ On its first start, the integration installs the editor into an environment of i
 
 - **A process of its own.** The editor runs next to Home Assistant, in its own Python environment, with exactly the package versions it was released with. Home Assistant's own packages aren't changed. The environment uses Home Assistant's Python and is installed again when Home Assistant moves to another Python version.
 - **Administrators by default.** The panel and the MCP server are available to Home Assistant administrators, and the editor is reachable only through Home Assistant's sign-in. An option opens both to all users (see below).
+- **Keys from your KNX authoring tool.** The editor reads the signing key, the project-log key and the MyKNX sign-in from the tool's assemblies you upload, with a .NET runtime. The integration installs Microsoft's .NET 10 runtime for it next to the editor (a 37 MB download, checked by its checksum).
 - **Your files.** The editor's settings, product catalog and file folder are in `xknx_editor` in your configuration folder and are part of Home Assistant's backups. Its environment is in `.cache/xknx_editor`, which backups leave out; it's installed again when it's missing.
 
 ## Connecting to the KNX Bus

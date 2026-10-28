@@ -31,6 +31,12 @@ async def async_get_config_entry_diagnostics(
             "exists": await asyncio.to_thread(environment.python.exists),
             "state": await asyncio.to_thread(environment.state),
         },
+        # The .NET runtime and the key-extraction helpers (their state, the settings the editor
+        # gets).
+        "dotnet": {
+            "state": await asyncio.to_thread(manager.dotnet.state),
+            "environment": sorted(await asyncio.to_thread(manager.dotnet.environment)),
+        },
         "process": {
             "running": process is not None and process.running,
             "runs": manager.run,

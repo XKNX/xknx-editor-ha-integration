@@ -63,6 +63,7 @@ class EditorProcess:
         password: str,
         mcp_token: str,
         mcp_url: str | None = None,
+        environment: dict[str, str] | None = None,
     ) -> None:
         self._python = python
         self._data = data
@@ -71,6 +72,8 @@ class EditorProcess:
         self._password = password
         self.mcp_token = mcp_token
         self._mcp_url = mcp_url
+        # More settings for the editor: the .NET runtime and its helpers (dotnet.py).
+        self._extra_environment = environment or {}
         self._process: asyncio.subprocess.Process | None = None
         self._reader: asyncio.Task[None] | None = None
         # The last lines the editor wrote, for the message when it fails.
@@ -103,6 +106,10 @@ class EditorProcess:
             PYTHONUNBUFFERED="1",
             NO_COLOR="1",
         )
+        env.update(self._extra_environment)
+        if dotnet := self._extra_environment.get("DOTNET_ROOT"):
+            # The editor runs the .NET runtime as `dotnet`.
+            env["PATH"] = os.pathsep.join(filter(None, (dotnet, env.get("PATH"))))
         return env
 
     async def async_start(self, session: ClientSession) -> None:

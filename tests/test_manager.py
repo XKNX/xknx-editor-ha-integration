@@ -8,6 +8,7 @@ from homeassistant.helpers import issue_registry as ir
 
 from custom_components.xknx_editor import manager as manager_module
 from custom_components.xknx_editor.const import DOMAIN
+from custom_components.xknx_editor.dotnet import DotnetError
 from custom_components.xknx_editor.environment import InstallError
 from custom_components.xknx_editor.manager import ISSUE_NOT_RUNNING, EditorManager
 
@@ -144,4 +145,16 @@ async def test_mcp_address_is_home_assistants(hass: HomeAssistant) -> None:
     assert manager._mcp_url() == "https://ha.example:8123/api/xknx_editor/mcp"
     with patch.object(manager_module, "get_url", side_effect=manager_module.NoURLAvailableError):
         assert manager._mcp_url() is None
+    await manager.client.close()
+
+
+async def test_editor_starts_without_dotnet(hass: HomeAssistant, caplog) -> None:
+    manager = EditorManager(hass, password="x", requirements="r.txt")
+    with patch.object(
+        manager.dotnet,
+        "async_ensure_runtime",
+        side_effect=DotnetError("no .NET runtime for armv7l"),
+    ):
+        await manager._async_ensure_dotnet(None, "")  # type: ignore[arg-type]
+    assert "will not read keys from assemblies: no .NET runtime for armv7l" in caplog.text
     await manager.client.close()

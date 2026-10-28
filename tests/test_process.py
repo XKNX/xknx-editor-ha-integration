@@ -1,6 +1,7 @@
 """Starting and stopping the editor process, with a stand-in for the editor."""
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -18,6 +19,7 @@ host, port = web.rsplit(":", 1)
 with open("seen.json", "w") as f:
     json.dump({"argv": sys.argv[1:], "password": os.environ.get("XKNX_WEB_PASSWORD"),
                "mcp_token": os.environ.get("XKNX_MCP_AUTH_TOKEN"),
+               "path": os.environ.get("PATH"), "helpers": os.environ.get("XKNX_KEYEXTRACT_DIR"),
                "data": os.environ.get("XDG_DATA_HOME"), "cache": os.environ.get("XDG_CACHE_HOME"),
                "pythonpath": os.environ.get("PYTHONPATH")}, f)
 if os.environ.get("FAKE_FAIL"):
@@ -52,6 +54,7 @@ def editor(tmp_path: Path) -> EditorProcess:
         password="secret",
         mcp_token="mcp-secret",
         mcp_url="https://ha.example/api/xknx_editor/mcp",
+        environment={"DOTNET_ROOT": "/opt/dotnet", "XKNX_KEYEXTRACT_DIR": "/opt/keyextract"},
     )
 
 
@@ -74,6 +77,9 @@ async def test_start_and_stop(editor: EditorProcess, tmp_path: Path, monkeypatch
     assert editor.mcp_endpoint == f"http://127.0.0.1:{editor.mcp_port}/mcp"
     assert "--mcp-url=https://ha.example/api/xknx_editor/mcp" in seen["argv"]
     assert seen["mcp_token"] == "mcp-secret"
+    # The .NET runtime first on the path, the helpers named.
+    assert seen["path"].split(os.pathsep)[0] == "/opt/dotnet"
+    assert seen["helpers"] == "/opt/keyextract"
     assert seen["data"] == str(tmp_path / "data" / "data")
     assert seen["cache"] == str(tmp_path / "cache")
     # Home Assistant's module path does not reach the editor.

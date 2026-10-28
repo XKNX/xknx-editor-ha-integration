@@ -15,6 +15,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 
 from .const import DATA_FOLDER, DOMAIN, EDITOR_VERSION, ENVIRONMENT_FOLDER, MCP_URL
+from .dotnet import DotnetError, DotnetInstall
 from .environment import EditorEnvironment, InstallError
 from .process import EditorProcess, StartError
 from .proxy import Sessions
@@ -48,6 +49,7 @@ class EditorManager:
         self._requirements = requirements
         self.sessions = Sessions()
         self.environment = EditorEnvironment(Path(hass.config.path(ENVIRONMENT_FOLDER)))
+        self.dotnet = DotnetInstall(self.environment.root)
         self.process: EditorProcess | None = None
         # Increases with every start, so the proxy signs in again after a restart.
         self.run = 0
@@ -115,10 +117,10 @@ class EditorManager:
 
     async def _async_start(self) -> None:
         self._progress(f"Installing XKNX Editor {EDITOR_VERSION}")
-        requirements = await self.environment.async_requirements(
-            async_get_clientsession(self.hass), self._requirements
-        )
+        session = async_get_clientsession(self.hass)
+        requirements = await self.environment.async_requirements(session, self._requirements)
         python = await self.environment.async_ensure(requirements, self._progress)
+        await self._async_ensure_dotnet(session, requirements)
         self._progress("Starting")
         self.process = EditorProcess(
             python,
@@ -129,9 +131,20 @@ class EditorManager:
             # Only the proxy signs in to the MCP server; a new token for every run.
             mcp_token=secrets.token_urlsafe(32),
             mcp_url=self._mcp_url(),
+            environment=await asyncio.to_thread(self.dotnet.environment),
         )
         self.run += 1
         await self.process.async_start(self.client)
+
+    async def _async_ensure_dotnet(self, session: aiohttp.ClientSession, requirements: str) -> None:
+        """The .NET runtime and the key-extraction helpers; without them the editor runs too, only
+        it cannot read keys from the KNX authoring tool's assemblies."""
+        self._progress("Installing the .NET runtime")
+        try:
+            await self.dotnet.async_ensure_runtime(session)
+            await self.dotnet.async_ensure_helpers(session, self._requirements, requirements)
+        except DotnetError as error:
+            _LOGGER.warning("XKNX Editor will not read keys from assemblies: %s", error)
 
     async def async_stop(self) -> None:
         self._stopping = True
