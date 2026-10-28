@@ -17,6 +17,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.loader import async_get_integration
 
 from .const import (
     CONF_ALLOW_NON_ADMINS,
@@ -59,8 +60,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: XknxEditorConfigEntry) -> bool:
     """Start the editor and show it in the sidebar."""
+    integration = await async_get_integration(hass, DOMAIN)
     requirements = entry.options.get(CONF_REQUIREMENTS) or REQUIREMENTS_URL.format(
-        version=EDITOR_VERSION
+        release=integration.version, version=EDITOR_VERSION
     )
     manager = EditorManager(
         hass,

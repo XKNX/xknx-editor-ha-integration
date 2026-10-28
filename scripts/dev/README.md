@@ -30,7 +30,7 @@ Use the tag of the release to test against (`dev`, `beta`, or a version such as 
 python scripts/dev/setup_ha.py
 ```
 
-This onboards Home Assistant (user `dev`, password `dev-password`) and adds XKNX Editor. To try an editor build before its release, build its wheels and requirements file with `editor_requirements.py` and pass the file's path on the Home Assistant host as the argument.
+This onboards Home Assistant (user `dev`, password `dev-password`) and adds XKNX Editor. To try an editor build before its release, build its wheels and requirements file with `scripts/release_files.py --editor <checkout> --base-url file:///<folder on the Home Assistant host> --out <folder>` and pass the requirements file's path on the Home Assistant host as the argument.
 
 ## Checks
 

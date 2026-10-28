@@ -2,12 +2,23 @@ name: Release
 
 # The Marketplace installs releases: the tag must equal the manifest's version (for example
 # 0.1.0), and hassfest and the HACS checks must pass for it.
+# Each release also carries what it installs the editor from (scripts/release_files.py), built from
+# the editor release const.EDITOR_VERSION names. A manual run builds them for a tag as a workflow
+# artifact only.
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build the files for (the manifest's version)
+        required: true
 
 permissions:
   contents: read
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
 
 jobs:
   version:
@@ -15,8 +26,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Tag equals the manifest version
-        env:
-          TAG: ${{ github.event.release.tag_name }}
         run: |
           version=$(python3 -c "import json; print(json.load(open('custom_components/xknx_editor/manifest.json'))['version'])")
           if [ "$TAG" != "$version" ]; then
@@ -36,3 +45,46 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+
+  files:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to upload assets to the release
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - name: Editor release
+        id: editor
+        run: |
+          version=$(python3 -c "import runpy; print(runpy.run_path('scripts/release_files.py')['editor_version'](open('custom_components/xknx_editor/const.py').read()))")
+          echo "tag=xknx-editor-v$version" >>"$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        with:
+          repository: XKNX/xknx-editor
+          ref: ${{ steps.editor.outputs.tag }}
+          path: editor
+      - uses: astral-sh/setup-uv@v10.3.2
+      # The key-extraction helpers are built like in the editor's Docker image, with the .NET SDK.
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      - name: Build the files
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+          DOTNET_NOLOGO: "1"
+        run: python3 scripts/release_files.py --editor editor --tag "$TAG" --out release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-files
+          path: |
+            release/*.txt
+            release/*.zip
+            release/*.whl
+          if-no-files-found: error
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" release/*.txt release/*.zip release/*.whl --clobber

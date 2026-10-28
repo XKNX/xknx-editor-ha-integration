@@ -6,11 +6,13 @@ DOMAIN: Final = "xknx_editor"
 
 # The editor release this version of the integration installs.
 EDITOR_VERSION: Final = "0.8.0"
-# The locked requirements of an editor release (third-party packages from PyPI with hashes, the
-# editor's own packages as wheels attached to the release).
+# The locked requirements of that editor release (third-party packages from PyPI with hashes, the
+# editor's own packages as wheels), attached to the integration's own release ({release}, the
+# manifest's version) by scripts/release_files.py, so the editor's releases keep only what its
+# users download.
 REQUIREMENTS_URL: Final = (
-    "https://github.com/XKNX/xknx-editor/releases/download/"
-    "xknx-editor-v{version}/xknx-editor-{version}-requirements.txt"
+    "https://github.com/XKNX/xknx-editor-ha-integration/releases/download/"
+    "{release}/xknx-editor-{version}-requirements.txt"
 )
 
 # The .NET runtime the editor reads the KNX authoring tool's assemblies with (signing key, project

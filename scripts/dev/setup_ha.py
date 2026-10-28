@@ -1,6 +1,7 @@
 """Onboard the test Home Assistant on localhost:8123 (user dev, password dev-password) and add XKNX
 Editor; with an argument, set its requirements option to it (a URL, or a path on the Home
-Assistant host, e.g. from editor_requirements.py). Tokens go to .dev/ of the repository."""
+Assistant host, e.g. from scripts/release_files.py --base-url). Tokens go to .dev/ of the
+repository."""
 
 import json
 import sys
