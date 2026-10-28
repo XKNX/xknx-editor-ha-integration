@@ -31,9 +31,18 @@ _ISSUE_DETAIL = 500
 class EditorManager:
     """The editor of one config entry."""
 
-    def __init__(self, hass: HomeAssistant, *, password: str, requirements: str) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        *,
+        password: str,
+        requirements: str,
+        allow_non_admins: bool = False,
+    ) -> None:
         self.hass = hass
         self.password = password
+        # Every signed-in user gets the panel, not only administrators.
+        self.allow_non_admins = allow_non_admins
         self._requirements = requirements
         self.sessions = Sessions()
         self.environment = EditorEnvironment(Path(hass.config.path(ENVIRONMENT_FOLDER)))

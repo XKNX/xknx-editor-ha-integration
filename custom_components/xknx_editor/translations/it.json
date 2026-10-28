@@ -15,9 +15,11 @@
       "init": {
         "title": "Opzioni di XKNX Editor",
         "data": {
+          "allow_non_admins": "Pannello per tutti gli utenti",
           "requirements": "File dei requisiti"
         },
         "data_description": {
+          "allow_non_admins": "Anche gli utenti che non sono amministratori vedono XKNX Editor nella barra laterale. L’editor non ha ruoli propri: chiunque lo apra può modificare il progetto e programmare i dispositivi sul bus KNX.",
           "requirements": "Lasciare vuoto per la versione dell’editor di questa integrazione. Altrimenti un URL o un percorso sull’host di Home Assistant di un altro file dei requisiti, ad es. per provare una build dell’editor."
         }
       }

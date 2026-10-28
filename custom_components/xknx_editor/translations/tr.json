@@ -15,9 +15,11 @@
       "init": {
         "title": "XKNX Editor seçenekleri",
         "data": {
+          "allow_non_admins": "Tüm kullanıcılar için panel",
           "requirements": "Gereksinim dosyası"
         },
         "data_description": {
+          "allow_non_admins": "Yönetici olmayan kullanıcılar da XKNX Editor’ü kenar çubuğunda görür. Düzenleyicinin kendi rolleri yoktur: onu açan herkes projeyi değiştirebilir ve KNX veri yolundaki cihazları programlayabilir.",
           "requirements": "Bu entegrasyonun düzenleyici sürümü için boş bırakın. Aksi halde başka bir gereksinim dosyasının URL’si veya Home Assistant ana bilgisayarındaki yolu, ör. bir düzenleyici derlemesini denemek için."
         }
       }

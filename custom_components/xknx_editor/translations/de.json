@@ -15,9 +15,11 @@
       "init": {
         "title": "Optionen für XKNX Editor",
         "data": {
+          "allow_non_admins": "Panel für alle Benutzer",
           "requirements": "Requirements-Datei"
         },
         "data_description": {
+          "allow_non_admins": "Auch Benutzer, die keine Administratoren sind, sehen XKNX Editor in der Seitenleiste. Der Editor hat keine eigenen Rollen: Wer ihn öffnet, kann das Projekt ändern und Geräte am KNX-Bus programmieren.",
           "requirements": "Leer lassen für die Editor-Version dieser Integration. Sonst die URL oder ein Pfad auf dem Home-Assistant-Host einer anderen Requirements-Datei, z. B. um einen Editor-Build auszuprobieren."
         }
       }

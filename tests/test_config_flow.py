@@ -8,6 +8,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.xknx_editor.const import (
+    CONF_ALLOW_NON_ADMINS,
     CONF_EDITOR_PASSWORD,
     CONF_REQUIREMENTS,
     DOMAIN,
@@ -42,11 +43,21 @@ async def test_options_set_and_clear_requirements(hass: HomeAssistant) -> None:
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] is FlowResultType.FORM
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_REQUIREMENTS: " /config/test-requirements.txt "}
+        result["flow_id"],
+        {CONF_ALLOW_NON_ADMINS: True, CONF_REQUIREMENTS: " /config/test-requirements.txt "},
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_REQUIREMENTS] == "/config/test-requirements.txt"
+    assert entry.options[CONF_ALLOW_NON_ADMINS] is True
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert entry.options[CONF_REQUIREMENTS] == ""
+    # The form keeps what was chosen until it is changed.
+    assert entry.options[CONF_ALLOW_NON_ADMINS] is True
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_ALLOW_NON_ADMINS: False}
+    )
+    assert entry.options[CONF_ALLOW_NON_ADMINS] is False

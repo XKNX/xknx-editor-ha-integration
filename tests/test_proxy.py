@@ -14,6 +14,7 @@ from pytest_homeassistant.typing import ClientSessionGenerator, WebSocketGenerat
 
 from custom_components.xknx_editor import proxy
 from custom_components.xknx_editor.const import (
+    CONF_ALLOW_NON_ADMINS,
     CONF_EDITOR_PASSWORD,
     DOMAIN,
     EDITOR_COOKIE,
@@ -99,7 +100,15 @@ async def editor(hass: HomeAssistant) -> AsyncGenerator[FakeEditor]:
 
 
 @pytest.fixture
-async def manager(hass: HomeAssistant, editor: FakeEditor) -> AsyncGenerator[EditorManager]:
+def options() -> dict[str, object]:
+    """The config entry's options (a test sets others by parametrizing this)."""
+    return {}
+
+
+@pytest.fixture
+async def manager(
+    hass: HomeAssistant, editor: FakeEditor, options: dict[str, object]
+) -> AsyncGenerator[EditorManager]:
     """The integration set up, with the fake editor running in place of the real one."""
 
     async def run(self: EditorManager) -> None:
@@ -107,7 +116,7 @@ async def manager(hass: HomeAssistant, editor: FakeEditor) -> AsyncGenerator[Edi
         self.run = 1
         self.status = "Running"
 
-    entry = MockConfigEntry(domain=DOMAIN, data={CONF_EDITOR_PASSWORD: PASSWORD})
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_EDITOR_PASSWORD: PASSWORD}, options=options)
     entry.add_to_hass(hass)
     with patch.object(EditorManager, "async_run", run):
         assert await async_setup_component(hass, DOMAIN, {})
@@ -233,6 +242,25 @@ async def test_sessions_only_for_administrators(
     response = await client.receive_json()
     assert not response["success"]
     assert response["error"]["code"] == "unauthorized"
+    await client.send_json_auto_id({"type": f"{DOMAIN}/session/validate", "session": "x"})
+    assert (await client.receive_json())["error"]["code"] == "unauthorized"
+
+
+@pytest.mark.parametrize("options", [{CONF_ALLOW_NON_ADMINS: True}])
+async def test_every_user_with_the_option(
+    hass: HomeAssistant,
+    manager: EditorManager,
+    hass_ws_client: WebSocketGenerator,
+    hass_read_only_access_token: str,
+) -> None:
+    assert not hass.data["frontend_panels"]["xknx-editor"].require_admin
+    client = await hass_ws_client(hass, hass_read_only_access_token)
+    await client.send_json_auto_id({"type": f"{DOMAIN}/session"})
+    response = await client.receive_json()
+    assert response["success"]
+    session = response["result"]["session"]
+    await client.send_json_auto_id({"type": f"{DOMAIN}/session/validate", "session": session})
+    assert (await client.receive_json())["result"] == {"valid": True}
 
 
 async def test_validate_keeps_a_session_live(

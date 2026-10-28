@@ -15,6 +15,8 @@ REQUIREMENTS_URL: Final = (
 
 # Config entry data: the password the editor process accepts (only the proxy signs in with it).
 CONF_EDITOR_PASSWORD: Final = "editor_password"
+# Option: every signed-in user gets the panel, not only administrators.
+CONF_ALLOW_NON_ADMINS: Final = "allow_non_admins"
 # Option: another requirements file (a URL or a path on the Home Assistant host), e.g. to try an
 # editor build before its release.
 CONF_REQUIREMENTS: Final = "requirements"

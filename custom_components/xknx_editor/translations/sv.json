@@ -15,9 +15,11 @@
       "init": {
         "title": "Alternativ för XKNX Editor",
         "data": {
+          "allow_non_admins": "Panel för alla användare",
           "requirements": "Requirements-fil"
         },
         "data_description": {
+          "allow_non_admins": "Även användare som inte är administratörer ser XKNX Editor i sidofältet. Redigeraren har inga egna roller: alla som öppnar den kan ändra projektet och programmera enheter på KNX-bussen.",
           "requirements": "Lämna tomt för den här integrationens editorversion. Annars en URL eller en sökväg på Home Assistant-värden till en annan requirements-fil, t.ex. för att prova en editor-build."
         }
       }

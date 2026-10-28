@@ -15,9 +15,11 @@
       "init": {
         "title": "XKNX Editorin asetukset",
         "data": {
+          "allow_non_admins": "Paneeli kaikille käyttäjille",
           "requirements": "Vaatimustiedosto"
         },
         "data_description": {
+          "allow_non_admins": "Myös käyttäjät, jotka eivät ole järjestelmänvalvojia, näkevät XKNX Editorin sivupalkissa. Editorilla ei ole omia rooleja: kuka tahansa sen avaava voi muuttaa projektia ja ohjelmoida laitteita KNX-väylällä.",
           "requirements": "Jätä tyhjäksi, jos haluat tämän integraation editoriversion. Muuten toisen vaatimustiedoston URL-osoite tai polku Home Assistant -isännällä, esimerkiksi editorin koontiversion kokeilemiseksi."
         }
       }

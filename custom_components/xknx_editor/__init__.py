@@ -1,7 +1,8 @@
 """XKNX Editor: the KNX project editor in Home Assistant's sidebar.
 
 The editor runs as a process of its own, in an environment of its own (see environment.py), and
-its web UI reaches signed-in administrators through the proxy in proxy.py.
+its web UI reaches signed-in administrators (every signed-in user when the options allow it)
+through the proxy in proxy.py.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
+    CONF_ALLOW_NON_ADMINS,
     CONF_EDITOR_PASSWORD,
     CONF_REQUIREMENTS,
     DOMAIN,
@@ -60,7 +62,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: XknxEditorConfigEntry) -
         version=EDITOR_VERSION
     )
     manager = EditorManager(
-        hass, password=entry.data[CONF_EDITOR_PASSWORD], requirements=requirements
+        hass,
+        password=entry.data[CONF_EDITOR_PASSWORD],
+        requirements=requirements,
+        allow_non_admins=entry.options.get(CONF_ALLOW_NON_ADMINS, False),
     )
     entry.runtime_data = manager
     entry.async_create_background_task(hass, manager.async_run(), f"{DOMAIN} editor")
@@ -72,7 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: XknxEditorConfigEntry) -
         sidebar_title=PANEL_TITLE,
         sidebar_icon=PANEL_ICON,
         module_url=f"{STATIC_URL}/panel.js?v={EDITOR_VERSION}",
-        require_admin=True,
+        require_admin=not manager.allow_non_admins,
     )
     return True
 
@@ -88,28 +93,41 @@ async def _async_options_updated(hass: HomeAssistant, entry: XknxEditorConfigEnt
     await hass.config_entries.async_reload(entry.entry_id)
 
 
+def _allowed(
+    connection: websocket_api.ActiveConnection, msg: dict[str, Any], manager: EditorManager | None
+) -> bool:
+    """Whether the user may use the panel: administrators, or everyone when the options allow it.
+    Sends the error when not."""
+    if manager is None:
+        connection.send_error(msg["id"], "not_loaded", "XKNX Editor is not set up")
+        return False
+    if not (connection.user.is_admin or manager.allow_non_admins):
+        connection.send_error(msg["id"], websocket_api.ERR_UNAUTHORIZED, "Administrators only")
+        return False
+    return True
+
+
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/session"})
-@websocket_api.require_admin
 @callback
 def websocket_session(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """A new session for the panel."""
-    if (manager := _manager(hass)) is None:
-        connection.send_error(msg["id"], "not_loaded", "XKNX Editor is not set up")
-        return
-    connection.send_result(msg["id"], {"session": manager.sessions.create()})
+    manager = _manager(hass)
+    if _allowed(connection, msg, manager):
+        assert manager is not None
+        connection.send_result(msg["id"], {"session": manager.sessions.create()})
 
 
 @websocket_api.websocket_command(
     {vol.Required("type"): f"{DOMAIN}/session/validate", vol.Required("session"): str}
 )
-@websocket_api.require_admin
 @callback
 def websocket_validate_session(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Keep the panel's session live; whether it still was."""
     manager = _manager(hass)
-    valid = manager is not None and manager.sessions.validate(msg["session"])
-    connection.send_result(msg["id"], {"valid": valid})
+    if _allowed(connection, msg, manager):
+        assert manager is not None
+        connection.send_result(msg["id"], {"valid": manager.sessions.validate(msg["session"])})

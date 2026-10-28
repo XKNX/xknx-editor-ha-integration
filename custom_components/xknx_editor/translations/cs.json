@@ -15,9 +15,11 @@
       "init": {
         "title": "Možnosti XKNX Editor",
         "data": {
+          "allow_non_admins": "Panel pro všechny uživatele",
           "requirements": "Soubor požadavků"
         },
         "data_description": {
+          "allow_non_admins": "XKNX Editor uvidí v postranním panelu i uživatelé, kteří nejsou administrátory. Editor nemá vlastní role: kdokoli jej otevře, může měnit projekt a programovat zařízení na sběrnici KNX.",
           "requirements": "Ponechte prázdné pro verzi editoru této integrace. Jinak URL nebo cesta na hostiteli Home Assistant k jinému souboru požadavků, např. pro vyzkoušení sestavení editoru."
         }
       }

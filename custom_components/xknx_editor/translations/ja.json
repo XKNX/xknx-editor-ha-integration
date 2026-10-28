@@ -15,9 +15,11 @@
       "init": {
         "title": "XKNX Editor のオプション",
         "data": {
+          "allow_non_admins": "すべてのユーザーにパネルを表示",
           "requirements": "要件ファイル"
         },
         "data_description": {
+          "allow_non_admins": "管理者以外のユーザーにもサイドバーに XKNX Editor が表示されます。エディターには独自の権限区分がないため、開いたユーザーは誰でもプロジェクトを変更し、KNX バス上のデバイスをプログラムできます。",
           "requirements": "空欄にすると、この統合に対応するエディターのリリースを使用します。それ以外の場合は、別の要件ファイルの URL または Home Assistant ホスト上のパスを指定します（例: エディターのビルドを試す場合）。"
         }
       }

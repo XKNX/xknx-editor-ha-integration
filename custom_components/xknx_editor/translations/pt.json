@@ -15,9 +15,11 @@
       "init": {
         "title": "Opções do XKNX Editor",
         "data": {
+          "allow_non_admins": "Painel para todos os utilizadores",
           "requirements": "Ficheiro de requisitos"
         },
         "data_description": {
+          "allow_non_admins": "Também os utilizadores que não são administradores veem o XKNX Editor na barra lateral. O editor não tem funções próprias: qualquer pessoa que o abra pode alterar o projeto e programar dispositivos no barramento KNX.",
           "requirements": "Deixe vazio para a versão do editor desta integração. Caso contrário, um URL ou um caminho no anfitrião do Home Assistant para outro ficheiro de requisitos, p. ex. para experimentar uma compilação do editor."
         }
       }

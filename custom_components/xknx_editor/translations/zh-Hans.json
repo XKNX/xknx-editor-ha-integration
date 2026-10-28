@@ -15,9 +15,11 @@
       "init": {
         "title": "XKNX Editor 选项",
         "data": {
+          "allow_non_admins": "面板对所有用户可见",
           "requirements": "依赖文件"
         },
         "data_description": {
+          "allow_non_admins": "非管理员用户也会在侧边栏中看到 XKNX Editor。编辑器本身没有角色区分：任何打开它的人都可以修改项目，并对 KNX 总线上的设备进行编程。",
           "requirements": "留空则使用此集成对应的编辑器版本。否则填写另一个依赖文件的 URL 或其在 Home Assistant 主机上的路径，例如用于试用某个编辑器构建。"
         }
       }
