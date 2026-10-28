@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "XKNX Editor",
+        "description": "XKNX Editor, the KNX project editor, appears in the sidebar for administrators. On the first start it installs itself into an environment of its own in the Home Assistant configuration folder, which takes a few minutes and needs internet access."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "XKNX Editor is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "XKNX Editor Options",
+        "data": {
+          "requirements": "Requirements file"
+        },
+        "data_description": {
+          "requirements": "Leave empty for the editor release of this integration. Otherwise a URL or a path on the Home Assistant host of another requirements file, e.g. to try an editor build."
+        }
+      }
+    }
+  }
+}

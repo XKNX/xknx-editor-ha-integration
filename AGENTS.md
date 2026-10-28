@@ -1,0 +1,31 @@
+# AGENTS.md
+
+This file provides guidance to AI coding agents when working with code in this repository. `CLAUDE.md` only refers to this file, so keep all instructions here.
+
+## What this is
+
+A Home Assistant custom integration (domain `xknx_editor`) that runs the [XKNX Editor](https://github.com/XKNX/xknx-editor) in its browser mode and shows it in Home Assistant's sidebar. It is published through the Home Assistant Marketplace (HACS), which needs one integration per repository in `custom_components/<domain>/`.
+
+## Architecture
+
+- **Two parts.** The integration itself runs inside Home Assistant and has no `requirements`: it only uses what Home Assistant ships (aiohttp, voluptuous, ...). The editor runs as a process of its own (`process.py`), with its own frame loop, threads and packages.
+- **The editor's environment** (`environment.py`): a virtual environment with Home Assistant's Python, created and filled with uv (`python -m uv`, which Home Assistant installs its own packages with) from the requirements file of an editor release (`const.REQUIREMENTS_URL`, version `const.EDITOR_VERSION`). So the editor gets exactly the package versions it was released with, and Home Assistant's packages stay untouched. `--no-build`: every package must come as a wheel (Home Assistant's image is Alpine Linux, so musllinux wheels for CPython of Home Assistant's version, x86_64 and aarch64). The environment is created again when Home Assistant's Python version changes.
+- **Folders:** the environment, downloads and the editor's cache go to `/config/.cache/xknx_editor` (Home Assistant leaves `.cache` out of its backups); the editor's settings, catalog and file folder go to `/config/xknx_editor` (kept in backups).
+- **Access** (`proxy.py`, `frontend/panel.js`): like the Ingress of Home Assistant apps. The panel (administrators only) gets a session over Home Assistant's websocket (`xknx_editor/session`, renewed with `xknx_editor/session/validate`) and stores it in the cookie `xknx_editor_session` for `/api/xknx_editor/`. One session per browser tab (kept in `sessionStorage` while it is live): Home Assistant may create the panel more than once, and the editor gives control back only to a returning session. The proxy view at `/api/xknx_editor/ui/` forwards HTTP and websocket requests with a live session to the editor on `127.0.0.1`. The editor requires a password (random, in the config entry); only the proxy signs in with it, once per panel session and editor run, and sends the editor's session cookie instead of the browser's cookies.
+- **Manager** (`manager.py`): installs, starts and watches the editor, starts it again with growing waits when it ends; its status is what the proxy shows while the editor is not running.
+
+## Commands
+
+```bash
+uv sync                    # Install the development tools (Python 3.14)
+uv run pytest              # Tests (Linux or macOS: Home Assistant's test plugin needs fcntl)
+uv run ruff check          # Lint
+uv run ruff format         # Format
+```
+
+## Conventions
+
+- Follow Home Assistant's integration rules (config flow, `runtime_data`, translations in `translations/` with a complete `en.json`; custom integrations have no `strings.json`).
+- The release tag must equal `version` in `manifest.json`. `hacs.json` names the minimum Home Assistant version.
+- Never add `requirements` to the manifest: the editor's packages belong in its own environment.
+- Every change in behaviour comes with tests in `tests/`.
