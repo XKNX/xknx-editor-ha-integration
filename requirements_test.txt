@@ -1,0 +1,4 @@
+# Home Assistant's test fixtures of the release the tests run against (they bring Home Assistant
+# itself), and the frontend package that release's frontend integration requires.
+pytest-home-assistant
+home-assistant-frontend

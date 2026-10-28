@@ -17,11 +17,13 @@ A Home Assistant custom integration (domain `xknx_editor`) that runs the [XKNX E
 ## Commands
 
 ```bash
-uv sync                    # Install the development tools (Python 3.14)
-uv run pytest              # Tests (Linux or macOS: Home Assistant's test plugin needs fcntl)
-uv run ruff check          # Lint
-uv run ruff format         # Format
+uv venv --python 3.14 && uv pip install -r requirements_test.txt   # Test environment
+.venv/bin/pytest           # Tests (Linux or macOS: Home Assistant's test fixtures need fcntl)
+uvx ruff check             # Lint
+uvx ruff format            # Format
 ```
+
+The tests use Home Assistant's own test fixtures (`pytest-home-assistant`, imported as `pytest_homeassistant`), which come with the Home Assistant release they belong to; install the one of the release to test against.
 
 ## Conventions
 

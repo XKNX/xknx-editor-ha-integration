@@ -1,25 +1,12 @@
-[project]
-name = "xknx-editor-ha-integration"
-version = "0.1.0"
-description = "Home Assistant integration that runs the XKNX Editor"
-license = "Apache-2.0"
-requires-python = ">=3.14.2"
-dependencies = []
-
-[dependency-groups]
-dev = [
-    # The frontend package of the same Home Assistant release (its frontend manifest).
-    "home-assistant-frontend==20260930.5",
-    "pytest-homeassistant-custom-component==0.13.375",
-    "ruff>=0.16.5",
-]
-
-[tool.uv]
-package = false
+# Tool settings only: the integration has no packages of its own (Home Assistant loads it from
+# custom_components), and the test packages are in requirements_test.txt.
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+# Let Home Assistant install its httpx alias before respx is imported.
+addopts = "-p no:respx"
+pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.ruff]
