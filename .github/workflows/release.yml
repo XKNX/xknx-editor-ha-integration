@@ -1,0 +1,38 @@
+name: Release
+
+# The Marketplace installs releases: the tag must equal the manifest's version (for example
+# 0.1.0), and hassfest and the HACS checks must pass for it.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tag equals the manifest version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version=$(python3 -c "import json; print(json.load(open('custom_components/xknx_editor/manifest.json'))['version'])")
+          if [ "$TAG" != "$version" ]; then
+            echo "::error::Release tag $TAG differs from the manifest version $version"
+            exit 1
+          fi
+
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: integration
