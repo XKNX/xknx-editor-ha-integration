@@ -2,6 +2,8 @@
 
 This integration runs [XKNX Editor](https://github.com/XKNX/xknx-editor), the KNX project editor, on your Home Assistant server and shows it in the sidebar. It works with every kind of Home Assistant installation, including Home Assistant Container and Core, which can't install apps.
 
+![XKNX Editor in Home Assistant's sidebar](images/panel.png)
+
 ## Installation
 
 1. Open **Settings** > **Marketplace** in Home Assistant, search for **XKNX Editor** and install it.

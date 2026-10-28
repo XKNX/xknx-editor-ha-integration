@@ -43,8 +43,9 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     for i in range(0, len(sizes), 3):
         width, height, scheme = int(sizes[i]), int(sizes[i + 1]), sizes[i + 2]
+        # Home Assistant's language follows the browser's.
         context = browser.new_context(
-            viewport={"width": width, "height": height}, color_scheme=scheme
+            viewport={"width": width, "height": height}, color_scheme=scheme, locale="en-US"
         )
         context.add_init_script(
             f"localStorage.setItem('hassTokens', {json.dumps(json.dumps(tokens))});"
