@@ -69,6 +69,8 @@ def test_helpers_next_to_the_requirements() -> None:
         == "https://github.com/x/releases/download/v1/xknx-editor-1-keyextract.zip"
     )
     assert helpers_source("/config/build/requirements.txt") == "/config/build/keyextract.zip"
+    # Another name: the helpers lie in the same folder.
+    assert helpers_source("/config/build/editor-reqs.lock") == "/config/build/keyextract.zip"
     digest = "ab" * 32
     assert helpers_hash(f"# keyextract.zip sha256:{digest}\nnumpy==2.5.4\n") == digest
     assert helpers_hash("numpy==2.5.4\n") is None
@@ -121,6 +123,39 @@ async def test_runtime_with_another_checksum_is_refused(
     assert not list(install.root.glob("*.download"))
 
 
+async def test_a_failed_download_leaves_nothing_behind(
+    hass: HomeAssistant, install: DotnetInstall, aioclient_mock: AiohttpClientMocker
+) -> None:
+    aioclient_mock.get(RUNTIME_URL, status=404)
+    with (
+        patch.object(dotnet, "runtime_id", return_value="linux-musl-x64"),
+        patch.dict(dotnet.DOTNET_RUNTIMES, {"linux-musl-x64": (RUNTIME_URL, "0" * 128)}),
+        pytest.raises(DotnetError, match=f"Could not download {RUNTIME_URL}"),
+    ):
+        await install.async_ensure_runtime(async_get_clientsession(hass))
+    assert not install.runtime.exists()
+    assert not list(install.root.glob("*.download"))
+
+
+async def test_a_broken_runtime_archive_is_refused(
+    hass: HomeAssistant, install: DotnetInstall, aioclient_mock: AiohttpClientMocker
+) -> None:
+    archive = b"not a tar archive"
+    aioclient_mock.get(RUNTIME_URL, content=archive)
+    with (
+        patch.object(dotnet, "runtime_id", return_value="linux-musl-x64"),
+        patch.dict(
+            dotnet.DOTNET_RUNTIMES,
+            {"linux-musl-x64": (RUNTIME_URL, hashlib.sha512(archive).hexdigest())},
+        ),
+        pytest.raises(DotnetError, match="Could not unpack"),
+    ):
+        await install.async_ensure_runtime(async_get_clientsession(hass))
+    assert not install.runtime.exists()
+    assert not install.runtime.with_name("dotnet.new").exists()
+    assert install.environment() == {}
+
+
 async def test_no_runtime_for_this_platform(hass: HomeAssistant, install: DotnetInstall) -> None:
     with (
         patch.object(dotnet, "runtime_id", return_value=None),
@@ -152,6 +187,12 @@ async def test_helpers_from_a_file_are_checked(
     (tmp_path / "keyextract.zip").write_bytes(archive)
     source = str(tmp_path / "requirements.txt")
     session = async_get_clientsession(hass)
+    with pytest.raises(DotnetError, match="Could not read"):
+        await install.async_ensure_helpers(
+            session,
+            str(tmp_path / "elsewhere" / "requirements.txt"),
+            "# keyextract.zip sha256:" + "0" * 64,
+        )
     with pytest.raises(DotnetError, match="expected checksum"):
         await install.async_ensure_helpers(session, source, "# keyextract.zip sha256:" + "0" * 64)
     with pytest.raises(DotnetError, match="names no key-extraction helpers"):

@@ -14,8 +14,10 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-# Measured in CI with `pytest --cov` and uploaded to Codecov: the integration, without the tests.
-source = ["custom_components/xknx_editor"]
+# Measured in CI with `pytest --cov` and uploaded to Codecov: the integration and the release
+# scripts, without the tests and the tools for a local Home Assistant (scripts/dev).
+source = ["custom_components/xknx_editor", "scripts"]
+omit = ["scripts/dev/*"]
 
 [tool.coverage.report]
 # Lines that never run by design

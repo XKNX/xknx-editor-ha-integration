@@ -8,6 +8,7 @@ from pathlib import Path
 import aiohttp
 import pytest
 
+from custom_components.xknx_editor import process
 from custom_components.xknx_editor.process import EditorProcess, StartError
 
 # A stand-in for `python -m editor_gui.main`: answers on its --web port, reports its arguments and
@@ -25,12 +26,19 @@ with open("seen.json", "w") as f:
 if os.environ.get("FAKE_FAIL"):
     print("[error    ] cannot start", flush=True)
     sys.exit(3)
+if os.environ.get("FAKE_SILENT"):
+    import time
+    time.sleep(60)
+if os.environ.get("FAKE_STUBBORN"):
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+else:
+    signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
     def log_message(self, *args): pass
 server = http.server.HTTPServer((host, int(port)), Handler)
-signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
+print("", flush=True)
 print("\\x1b[32mlistening\\x1b[0m", flush=True)
 server.serve_forever()
 """
@@ -87,7 +95,10 @@ async def test_start_and_stop(editor: EditorProcess, tmp_path: Path, monkeypatch
     assert (tmp_path / "data" / "files").is_dir()
     await editor.async_stop()
     assert not editor.running
-    assert "listening" in editor.output
+    # Without its colors, and without empty lines.
+    assert list(editor.output) == ["listening"]
+    # Stopping an editor that ended does nothing.
+    await editor.async_stop()
 
 
 async def test_start_failure_reports_the_output(editor: EditorProcess, monkeypatch) -> None:
@@ -96,3 +107,37 @@ async def test_start_failure_reports_the_output(editor: EditorProcess, monkeypat
         with pytest.raises(StartError, match="cannot start"):
             await editor.async_start(session)
     assert not editor.running
+
+
+async def test_an_editor_that_does_not_answer_is_stopped(
+    editor: EditorProcess, monkeypatch
+) -> None:
+    monkeypatch.setenv("FAKE_SILENT", "1")
+    monkeypatch.setattr(process, "_START_TIMEOUT", 1.0)
+    async with aiohttp.ClientSession() as session:
+        with pytest.raises(StartError, match="The editor did not answer"):
+            await editor.async_start(session)
+    assert not editor.running
+
+
+async def test_wait_gives_the_exit_code(editor: EditorProcess) -> None:
+    async with aiohttp.ClientSession() as session:
+        await editor.async_start(session)
+    assert editor._process is not None
+    editor._process.terminate()
+    assert await editor.async_wait() == 0
+    assert not editor.running
+    # The output was read to its end.
+    assert "listening" in editor.output
+
+
+async def test_an_editor_that_does_not_end_is_killed(
+    editor: EditorProcess, monkeypatch, caplog
+) -> None:
+    monkeypatch.setenv("FAKE_STUBBORN", "1")
+    monkeypatch.setattr(process, "_STOP_TIMEOUT", 0.5)
+    async with aiohttp.ClientSession() as session:
+        await editor.async_start(session)
+    await editor.async_stop()
+    assert not editor.running
+    assert "did not end in time, killing it" in caplog.text

@@ -37,6 +37,13 @@ def env(tmp_path: Path) -> EditorEnvironment:
     return EditorEnvironment(tmp_path / "cache")
 
 
+def test_the_environments_python(env: EditorEnvironment) -> None:
+    with patch.object(environment.sys, "platform", "linux"):
+        assert env.python == env.venv / "bin" / "python"
+    with patch.object(environment.sys, "platform", "win32"):
+        assert env.python == env.venv / "Scripts" / "python.exe"
+
+
 async def ensure(env: EditorEnvironment, uv: FakeUv, requirements: str) -> list[str]:
     uv.calls.clear()
     uv.requirements = requirements

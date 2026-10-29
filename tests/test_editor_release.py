@@ -155,3 +155,8 @@ def test_the_command_line(
     monkeypatch.setattr(sys, "argv", ["editor_release.py", "bump", "latest"])
     with pytest.raises(SystemExit):
         editor_release.main()
+    bumped: list[str] = []
+    monkeypatch.setattr(editor_release, "bump", bumped.append)
+    monkeypatch.setattr(sys, "argv", ["editor_release.py", "bump", "0.10.0"])
+    editor_release.main()
+    assert bumped == ["0.10.0"]

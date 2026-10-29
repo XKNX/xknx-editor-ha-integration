@@ -3,6 +3,8 @@
 import hashlib
 import importlib.util
 import json
+import sys
+import zipfile
 from pathlib import Path
 from types import ModuleType
 
@@ -127,6 +129,75 @@ def test_the_wheels_go_into_a_relative_out_folder(
         "xknxeditor-gui @ https://example.com/0.9.0/xknxeditor_gui-0.9.0-py3-none-any.whl" in text
     )
     assert not list(editor.rglob("*.whl"))
+
+
+def test_run_returns_the_output(tmp_path: Path) -> None:
+    assert release_files._run(sys.executable, "-c", "print('built')", cwd=tmp_path) == "built\n"
+
+
+def test_the_helpers_archive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    editor = tmp_path / "editor"
+    sources = editor / release_files._SOURCES
+    sources.mkdir(parents=True)
+    for _name, source, _package in release_files.HELPERS:
+        (sources / source).write_text(f"// {source}")
+    projects: dict[str, str] = {}
+
+    def run(*args: str, cwd: Path) -> str:
+        # dotnet publish: the project's assembly, and a symbol file the archive leaves out
+        assert args[:2] == ("dotnet", "publish")
+        projects[cwd.name] = (cwd / "xknxkeyx.csproj").read_text()
+        out = Path(args[args.index("-o") + 1])
+        out.mkdir(parents=True)
+        (out / "xknxkeyx.dll").write_bytes(b"MZ")
+        (out / "xknxkeyx.pdb").write_bytes(b"symbols")
+        return ""
+
+    monkeypatch.setattr(release_files, "_run", run)
+    target = tmp_path / "keyextract.zip"
+    release_files.build_helpers(editor, target)
+
+    with zipfile.ZipFile(target) as archive:
+        assert sorted(archive.namelist()) == [
+            "oauth/xknxkeyx.dll",
+            "sign/xknxkeyx.dll",
+            "trace/xknxkeyx.dll",
+        ]
+    # Each helper from its own source; only the trace helper needs a package.
+    assert '<Compile Include="_extract_trace.cs" />' in projects["trace"]
+    assert "System.Configuration.ConfigurationManager" in projects["trace"]
+    assert "PackageReference" not in projects["sign"]
+    assert "<TargetFramework>net10.0</TargetFramework>" in projects["oauth"]
+
+
+@pytest.mark.parametrize(
+    ("where", "base_url"),
+    [
+        (["--tag", "0.9.0"], f"{release_files.RELEASES_URL}/0.9.0"),
+        (["--base-url", "file:///builds/editor"], "file:///builds/editor"),
+    ],
+)
+def test_the_command_line(
+    where: list[str],
+    base_url: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls: list[tuple[Path, str, Path]] = []
+
+    def build(editor: Path, url: str, out: Path) -> Path:
+        calls.append((editor, url, out))
+        return out / "xknx-editor-0.9.0-requirements.txt"
+
+    monkeypatch.setattr(release_files, "build", build)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys, "argv", ["release_files.py", "--editor", "editor", *where, "--out", "release"]
+    )
+    release_files.main()
+    assert calls == [(tmp_path / "editor", base_url, Path("release"))]
+    assert "xknx-editor-0.9.0-requirements.txt and 0 wheels" in capsys.readouterr().out
 
 
 def test_no_requirements_file_without_the_editor_wheel(tmp_path: Path) -> None:
