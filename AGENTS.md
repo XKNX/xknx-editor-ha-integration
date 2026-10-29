@@ -34,7 +34,7 @@ Changes to the environment, the process, the proxy or the panel are also checked
 
 - Follow Home Assistant's integration rules (config flow, `runtime_data`, translations in `translations/` with a complete `en.json`; custom integrations have no `strings.json`).
 - The release tag must equal `version` in `manifest.json`. `hacs.json` names the minimum Home Assistant version.
-- A new editor release: set `const.EDITOR_VERSION` and release the integration; its release workflow builds and attaches the editor's files from that editor release.
+- A new editor release is followed automatically (`.github/workflows/editor-release.yml`, every 10 minutes or run manually): `scripts/editor_release.py` sets `const.EDITOR_VERSION` and the manifest version on a branch `release/<version>`, the tests and the release checks run on it and build the editor's files, then `main` moves to that commit and the release is published with its files and the editor's release notes. A failed run leaves the branch; the scheduled checks skip that version until a manual run. Integration-only releases are made by hand: publishing a release runs `release.yml`, which attaches the files.
 - **Versions follow the editor:** the integration's version (`manifest.json`, release tag without a `v`) is the editor version it installs, e.g. `0.9.0` installs editor 0.9.0. A fix of the integration alone before the next editor release adds a fourth number: `0.9.0.1`, `0.9.0.2`. Home Assistant sorts these after `0.9.0` and before `0.9.1`; never use `0.9.0-1` or `0.9.0.post1`, which it sorts before `0.9.0`, so no update would be offered.
 - Never add `requirements` to the manifest: the editor's packages belong in its own environment.
 - Every change in behaviour comes with tests in `tests/`.

@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # From editor-release.yml, for the commit it releases afterwards
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to test
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -14,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - uses: astral-sh/setup-uv@v10.3.2
       - run: uvx ruff format --check
       - run: uvx ruff check
@@ -26,6 +35,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - uses: astral-sh/setup-uv@v10.3.2
       - run: uv venv --python 3.14
       - run: uv pip install -r requirements_test.txt

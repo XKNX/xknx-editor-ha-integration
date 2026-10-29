@@ -1,0 +1,123 @@
+name: Editor Release
+
+# A release of the integration for each new release of the editor, soon after it (the editor's
+# releases are looked up every 10 minutes; a manual run checks at once):
+# 1. scripts/editor_release.py sets the editor version and the integration's own version (the
+#    same) on the branch release/<version>;
+# 2. tests.yml and release.yml (version, hassfest, HACS, the release files) check that commit;
+# 3. only then main moves to it and the release is published, with its files already attached.
+# A failed run leaves the branch release/<version>: the scheduled checks then skip that version
+# instead of failing every 10 minutes. Fix main and run this workflow manually, which starts over.
+# Integration-only releases (0.9.0.1) stay manual.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: editor-release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Newer editor release
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          tag=$(gh api repos/XKNX/xknx-editor/releases/latest --jq .tag_name)
+          version=$(python3 scripts/editor_release.py check "$tag")
+          if [ -z "$version" ]; then
+            echo "XKNX Editor $tag is installed already"
+          elif git ls-remote --exit-code --tags origin "refs/tags/$version" >/dev/null; then
+            echo "::warning::Release $version exists, but EDITOR_VERSION on main is older"
+            version=""
+          elif [ "$EVENT" = schedule ] &&
+            git ls-remote --exit-code --heads origin "release/$version" >/dev/null; then
+            echo "::warning::release/$version is left from a failed run: run this workflow manually"
+            version=""
+          fi
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
+  bump:
+    needs: check
+    if: needs.check.outputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # pushes the branch release/<version>
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the new editor version
+        id: commit
+        run: |
+          python3 scripts/editor_release.py bump "$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "release: $VERSION, installs XKNX Editor $VERSION"
+          git push --force origin "HEAD:refs/heads/release/$VERSION"
+          echo "sha=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
+
+  tests:
+    needs: bump
+    permissions:
+      contents: read
+      id-token: write # Codecov upload
+    uses: ./.github/workflows/tests.yml
+    with:
+      ref: ${{ needs.bump.outputs.sha }}
+
+  release-checks:
+    needs: [check, bump]
+    permissions:
+      contents: write # requested by its files job (it uploads only for a published release)
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.check.outputs.version }}
+      ref: ${{ needs.bump.outputs.sha }}
+
+  publish:
+    needs: [check, bump, tests, release-checks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # moves main, creates the release
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      SHA: ${{ needs.bump.outputs.sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.bump.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-files
+          path: release
+      - name: Release notes
+        run: |
+          gh api "repos/XKNX/xknx-editor/releases/tags/xknx-editor-v$VERSION" --jq .body >editor-notes.md
+          python3 scripts/editor_release.py notes "$VERSION" editor-notes.md >notes.md
+      # Fails when main moved on meanwhile (no fast-forward): run this workflow manually then.
+      - name: Move main to the release commit
+        run: git push origin "$SHA:refs/heads/main"
+      # A draft first, so the release is only published with its files.
+      - name: Publish the release
+        run: |
+          gh release create "$VERSION" --draft --target "$SHA" --title "$VERSION" --notes-file notes.md
+          gh release upload "$VERSION" release/*.txt release/*.zip release/*.whl
+          gh release edit "$VERSION" --draft=false --latest
+      - name: Remove the branch
+        run: git push origin --delete "release/$VERSION"

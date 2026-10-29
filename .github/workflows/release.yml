@@ -4,7 +4,7 @@ name: Release
 # 0.9.0), and hassfest and the HACS checks must pass for it.
 # Each release also carries what it installs the editor from (scripts/release_files.py), built from
 # the editor release const.EDITOR_VERSION names. A manual run builds them for a tag as a workflow
-# artifact only.
+# artifact only; so does editor-release.yml, for the commit (ref) it releases afterwards.
 on:
   release:
     types: [published]
@@ -12,6 +12,16 @@ on:
     inputs:
       tag:
         description: Release tag to build the files for (the manifest's version)
+        required: true
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to build the files for (the manifest's version)
+        type: string
+        required: true
+      ref:
+        description: Commit to check and build them from, before the tag exists
+        type: string
         required: true
 
 permissions:
@@ -25,6 +35,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - name: Tag equals the manifest version
         run: |
           version=$(python3 -c "import json; print(json.load(open('custom_components/xknx_editor/manifest.json'))['version'])")
@@ -37,6 +49,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - uses: home-assistant/actions/hassfest@master
 
   hacs:
@@ -54,7 +68,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ inputs.ref || env.TAG }}
       - name: Editor release
         id: editor
         run: |

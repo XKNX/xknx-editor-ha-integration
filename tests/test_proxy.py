@@ -18,6 +18,7 @@ from custom_components.xknx_editor.const import (
     CONF_EDITOR_PASSWORD,
     DOMAIN,
     EDITOR_COOKIE,
+    EDITOR_VERSION,
     MCP_URL,
     SESSION_COOKIE,
     UI_URL,
@@ -244,12 +245,12 @@ async def test_status_page_while_the_editor_is_not_running(
 ) -> None:
     session = await session_for(hass_ws_client, hass)
     manager.process = None
-    manager.status, manager.detail = "Installing XKNX Editor 0.9.0", "<step>"
+    manager.status, manager.detail = f"Installing XKNX Editor {EDITOR_VERSION}", "<step>"
     client = await hass_client_no_auth()
     response = await client.get(UI_URL, cookies={SESSION_COOKIE: session})
     assert response.status == 503
     text = await response.text()
-    assert "Installing XKNX Editor 0.9.0" in text
+    assert f"Installing XKNX Editor {EDITOR_VERSION}" in text
     assert "&lt;step&gt;" in text
 
 
