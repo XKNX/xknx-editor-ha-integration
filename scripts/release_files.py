@@ -32,6 +32,8 @@ from pathlib import Path
 
 RELEASES_URL = "https://github.com/XKNX/xknx-editor-ha-integration/releases/download"
 HELPERS_NAME = "keyextract.zip"
+# The wheel of the editor's application, which pulls in its own packages.
+EDITOR_WHEEL = "xknxeditor_gui"
 CONST = Path(__file__).resolve().parent.parent / "custom_components" / "xknx_editor" / "const.py"
 _SOURCES = Path("packages") / "proj" / "src" / "xknxeditor" / "proj" / "core"
 
@@ -85,6 +87,8 @@ def git_sources(exported: str) -> list[tuple[str, str, str]]:
 def requirements_text(exported: str, wheels: list[Path], base_url: str, helpers_sha256: str) -> str:
     """The requirements file: the exported packages without the ones from git (their wheels
     replace them), then every wheel by its URL under ``base_url`` and its hash."""
+    if not any(wheel.name.startswith(f"{EDITOR_WHEEL}-") for wheel in wheels):
+        raise SystemExit(f"no {EDITOR_WHEEL} wheel: the editor itself would not be installed")
     lines = [f"# {HELPERS_NAME} sha256:{helpers_sha256}"]
     skip = False
     for line in exported.splitlines():
@@ -138,6 +142,8 @@ def build(editor: Path, base_url: str, out: Path) -> Path:
     """Write the release files into ``out``, the wheels named under ``base_url``; returns the
     requirements file."""
     version = editor_version(CONST.read_text(encoding="utf-8"))
+    # The builds run in the editor checkout: a relative folder would be taken from there.
+    out = out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     members = sorted(p.parent for p in editor.glob("packages/*/pyproject.toml"))
     members += sorted(p.parent for p in editor.glob("apps/*/pyproject.toml"))

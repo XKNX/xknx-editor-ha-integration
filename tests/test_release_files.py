@@ -91,6 +91,52 @@ def test_the_requirements_file(tmp_path: Path) -> None:
     assert text.endswith("\n")
 
 
+def test_the_wheels_go_into_a_relative_out_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    editor = tmp_path / "editor"
+    for member in ("packages/proj", "apps/editor-gui"):
+        (editor / member).mkdir(parents=True)
+        (editor / member / "pyproject.toml").write_text("")
+    wheels = {
+        "proj": "xknxeditor_proj-0.9.0-py3-none-any.whl",
+        "editor-gui": "xknxeditor_gui-0.9.0-py3-none-any.whl",
+        "xknxproject": "xknxproject-3.10.0-py3-none-any.whl",
+    }
+
+    def run(*args: str, cwd: Path) -> str:
+        # Like uv: a relative --out-dir is taken from the folder it runs in.
+        if args[:2] == ("uv", "build"):
+            (cwd / args[4]).mkdir(parents=True, exist_ok=True)
+            (cwd / args[4] / wheels[Path(args[5]).name]).write_bytes(args[5].encode())
+        return _EXPORTED if args[:2] == ("uv", "export") else ""
+
+    monkeypatch.setattr(release_files, "_run", run)
+    monkeypatch.setattr(release_files, "build_helpers", lambda _e, target: target.write_bytes(b"z"))
+    integration = tmp_path / "integration"
+    integration.mkdir()
+    monkeypatch.chdir(integration)
+
+    requirements = release_files.build(editor, "https://example.com/0.9.0", Path("release"))
+
+    assert sorted(p.name for p in (integration / "release").glob("*.whl")) == sorted(
+        wheels.values()
+    )
+    text = requirements.read_text()
+    assert (
+        "xknxeditor-gui @ https://example.com/0.9.0/xknxeditor_gui-0.9.0-py3-none-any.whl" in text
+    )
+    assert not list(editor.rglob("*.whl"))
+
+
+def test_no_requirements_file_without_the_editor_wheel(tmp_path: Path) -> None:
+    wheel = tmp_path / "xknxproject-3.10.0-py3-none-any.whl"
+    wheel.write_bytes(b"wheel")
+
+    with pytest.raises(SystemExit, match="the editor itself would not be installed"):
+        release_files.requirements_text(_EXPORTED, [wheel], "https://example.com", "ab" * 32)
+
+
 def test_the_files_are_where_the_integration_looks_for_them() -> None:
     url = REQUIREMENTS_URL.format(release="0.2.0", version="0.9.0")
     assert url == f"{release_files.RELEASES_URL}/0.2.0/xknx-editor-0.9.0-requirements.txt"
