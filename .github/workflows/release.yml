@@ -1,7 +1,7 @@
 name: Release
 
 # The Marketplace installs releases: the tag must equal the manifest's version (for example
-# 0.1.0), and hassfest and the HACS checks must pass for it.
+# 0.9.0), and hassfest and the HACS checks must pass for it.
 # Each release also carries what it installs the editor from (scripts/release_files.py), built from
 # the editor release const.EDITOR_VERSION names. A manual run builds them for a tag as a workflow
 # artifact only.

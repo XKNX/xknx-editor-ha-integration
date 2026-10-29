@@ -244,12 +244,12 @@ async def test_status_page_while_the_editor_is_not_running(
 ) -> None:
     session = await session_for(hass_ws_client, hass)
     manager.process = None
-    manager.status, manager.detail = "Installing XKNX Editor 0.8.0", "<step>"
+    manager.status, manager.detail = "Installing XKNX Editor 0.9.0", "<step>"
     client = await hass_client_no_auth()
     response = await client.get(UI_URL, cookies={SESSION_COOKIE: session})
     assert response.status == 503
     text = await response.text()
-    assert "Installing XKNX Editor 0.8.0" in text
+    assert "Installing XKNX Editor 0.9.0" in text
     assert "&lt;step&gt;" in text
 
 
