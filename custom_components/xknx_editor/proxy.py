@@ -257,9 +257,12 @@ async def _websocket(
             asyncio.create_task(_forward(server, client)),
             asyncio.create_task(_forward(client, server)),
         ]
-        _done, pending = await asyncio.wait(forwards, return_when=asyncio.FIRST_COMPLETED)
-        for task in pending:
-            task.cancel()
+        try:
+            await asyncio.wait(forwards, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            # Also when Home Assistant cancels the request, because the browser left.
+            for task in forwards:
+                task.cancel()
         if not server.closed:
             await server.close(code=client.close_code or 1000)
     return server
