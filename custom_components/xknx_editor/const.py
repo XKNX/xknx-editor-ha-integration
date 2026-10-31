@@ -5,7 +5,7 @@ from typing import Final
 DOMAIN: Final = "xknx_editor"
 
 # The editor release this version of the integration installs.
-EDITOR_VERSION: Final = "0.9.2"
+EDITOR_VERSION: Final = "0.9.3"
 # The locked requirements of that editor release (third-party packages from PyPI with hashes, the
 # editor's own packages as wheels), attached to the integration's own release ({release}, the
 # manifest's version) by scripts/release_files.py, so the editor's releases keep only what its
