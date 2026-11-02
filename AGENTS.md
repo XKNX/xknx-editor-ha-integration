@@ -26,7 +26,7 @@ uvx ruff check             # Lint
 uvx ruff format            # Format
 ```
 
-The tests use Home Assistant's own test fixtures (`pytest-home-assistant`, imported as `pytest_homeassistant`), which come with the Home Assistant release they belong to; install the one of the release to test against.
+The tests use Home Assistant's own test fixtures (`pytest-homeassistant`), which come with the Home Assistant release they belong to; install the one of the release to test against.
 
 Changes to the environment, the process, the proxy or the panel are also checked in a real Home Assistant (its own container image, so Alpine and its Python): see `scripts/dev/README.md` (Docker, or WSL on Windows; onboarding, panel screenshots, tests and hassfest against a dev or beta build).
 
