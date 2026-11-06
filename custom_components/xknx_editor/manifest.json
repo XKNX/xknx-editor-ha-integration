@@ -1,6 +1,7 @@
 {
   "domain": "xknx_editor",
   "name": "XKNX Editor",
+  "after_dependencies": ["knx"],
   "categories": ["hubs_protocols.building_automation"],
   "codeowners": ["@ab-tools"],
   "config_flow": true,
