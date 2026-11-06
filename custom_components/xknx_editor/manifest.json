@@ -12,5 +12,5 @@
   "issue_tracker": "https://github.com/XKNX/xknx-editor-ha-integration/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.9.11"
+  "version": "0.10.0"
 }
