@@ -32,6 +32,7 @@ from .const import EDITOR_COOKIE
 from .entities import EntityLinks
 from .knx_bridge import (
     KnxError,
+    async_send_group,
     async_set_keyring,
     async_set_project,
     async_set_time_server,
@@ -285,6 +286,12 @@ class EditorLink:
             # The new entities first (their links and usage), then the answer.
             report()
             outbox.put_nowait(reply)
+        elif kind == "group_send":
+            # No answer: the telegram comes back as one of the KNX integration's.
+            try:
+                await async_send_group(self.hass, message)
+            except Exception:  # a wrong value must not end the link
+                _LOGGER.warning("The editor's group telegram was not sent", exc_info=True)
         elif kind == "telegram_history":
             answer: dict[str, Any] = {"type": "result", "id": message.get("id"), "error": None}
             try:

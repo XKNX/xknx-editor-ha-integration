@@ -76,13 +76,36 @@ def connection_info(hass: HomeAssistant) -> dict[str, Any] | None:
     if not isinstance(data, Mapping):
         return None
     kind = str(data.get("connection_type") or "")
+    # The transport as configured: "tunneling", "tunneling_tcp", "tunneling_tcp_secure",
+    # "routing", "routing_secure" or "automatic" (a gateway found each time).
     if kind.startswith("routing"):
         return {
             "type": "routing",
+            "transport": kind,
             "host": data.get("multicast_group"),
             "port": data.get("multicast_port"),
         }
-    return {"type": "tunneling", "host": data.get("host"), "port": data.get("port")}
+    return {
+        "type": "tunneling",
+        "transport": kind,
+        "host": data.get("host"),
+        "port": data.get("port"),
+    }
+
+
+async def async_send_group(hass: HomeAssistant, message: Any) -> None:
+    """Send a group read or write for the editor over the KNX integration's connection, with
+    its services knx.read and knx.send ({address, read} or {address, payload}: raw)."""
+    if not knx_loaded(hass) or not isinstance(message, dict):
+        raise KnxError("the KNX integration is not set up")
+    address = str(message.get("address") or "")
+    if message.get("read"):
+        await hass.services.async_call("knx", "read", {"address": address}, blocking=True)
+        return
+    payload = message.get("payload")
+    await hass.services.async_call(
+        "knx", "send", {"address": address, "payload": payload}, blocking=True
+    )
 
 
 # The xknx devices the KNX integration sends with on its own, and what they are for the editor.

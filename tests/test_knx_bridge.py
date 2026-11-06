@@ -13,6 +13,7 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.xknx_editor.knx_bridge import (
     KnxError,
+    async_send_group,
     async_set_project,
     async_telegram_history,
     connection_info,
@@ -257,12 +258,22 @@ async def test_the_knx_integrations_connection(hass: HomeAssistant, knx: _KnxMod
             "multicast_port": 3671,
         },
     )
-    assert connection_info(hass) == {"type": "routing", "host": "224.0.23.12", "port": 3671}
+    assert connection_info(hass) == {
+        "type": "routing",
+        "transport": "routing",
+        "host": "224.0.23.12",
+        "port": 3671,
+    }
     knx.entry = MockConfigEntry(
         domain="knx",
         data={"connection_type": "tunneling_tcp", "host": "192.168.1.10", "port": 3671},
     )
-    assert connection_info(hass) == {"type": "tunneling", "host": "192.168.1.10", "port": 3671}
+    assert connection_info(hass) == {
+        "type": "tunneling",
+        "transport": "tunneling_tcp",
+        "host": "192.168.1.10",
+        "port": 3671,
+    }
 
 
 async def test_telegrams_of_the_knx_integration(hass: HomeAssistant, knx: _KnxModule) -> None:
@@ -295,3 +306,23 @@ async def test_telegrams_of_the_knx_integration(hass: HomeAssistant, knx: _KnxMo
     assert flush_first
     assert query.order_descending is False
     assert dt_util.now() - query.start_time > timedelta(hours=5, minutes=59)
+
+
+async def test_group_telegrams_of_the_editor(hass: HomeAssistant, knx: _KnxModule) -> None:
+    called: list[tuple[str, dict[str, Any]]] = []
+
+    async def record(call: Any) -> None:
+        called.append((call.service, dict(call.data)))
+
+    hass.services.async_register("knx", "send", record)
+    hass.services.async_register("knx", "read", record)
+    await async_send_group(hass, {"address": "1/2/3", "payload": 1})
+    await async_send_group(hass, {"address": "1/2/4", "payload": [12, 34]})
+    await async_send_group(hass, {"address": "1/2/5", "read": True})
+    assert called == [
+        ("send", {"address": "1/2/3", "payload": 1}),
+        ("send", {"address": "1/2/4", "payload": [12, 34]}),
+        ("read", {"address": "1/2/5"}),
+    ]
+    with pytest.raises(KnxError):
+        await async_send_group(hass, "x")
