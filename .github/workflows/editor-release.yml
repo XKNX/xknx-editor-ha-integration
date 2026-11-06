@@ -102,7 +102,7 @@ jobs:
         with:
           ref: ${{ needs.bump.outputs.sha }}
           fetch-depth: 0
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: release-files
           path: release
