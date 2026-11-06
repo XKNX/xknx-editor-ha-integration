@@ -11,6 +11,7 @@ import pytest
 from aiohttp import WSMsgType, web
 from aiohttp.test_utils import TestServer
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from custom_components.xknx_editor import link as link_module
 from custom_components.xknx_editor.const import EDITOR_COOKIE
@@ -112,7 +113,12 @@ async def test_the_link_reports_the_knx_integration(
     assert hello["protocol"] == PROTOCOL
     assert hello["integration"] == "0.9.12"
     assert hello["home_assistant"]
-    assert await editor.next("knx") == {"type": "knx", "loaded": False, "project": None}
+    assert await editor.next("knx") == {
+        "type": "knx",
+        "loaded": False,
+        "project": None,
+        "connection": None,
+    }
     assert link.connected
 
     # The KNX integration is set up and gets a project in its panel: reported on its own.
@@ -121,7 +127,12 @@ async def test_the_link_reports_the_knx_integration(
         patch.object(link_module, "knx_loaded", return_value=True),
         patch.object(link_module, "project_info", return_value=held),
     ):
-        assert await editor.next("knx") == {"type": "knx", "loaded": True, "project": held}
+        assert await editor.next("knx") == {
+            "type": "knx",
+            "loaded": True,
+            "project": held,
+            "connection": None,
+        }
 
 
 async def test_the_editors_project_goes_to_the_knx_integration(
@@ -141,8 +152,11 @@ async def test_the_editors_project_goes_to_the_knx_integration(
     ):
         assert editor.socket is not None
         await editor.socket.send_json({"type": "set_project", "id": 7, "project": {"info": {}}})
-        # The new project first, then the answer.
-        assert await editor.next("knx") == {"type": "knx", "loaded": True, "project": held}
+        # The new project first, then the answer (a poll may report the KNX integration as
+        # loaded before).
+        while (state := await editor.next("knx"))["project"] is None:
+            assert state["loaded"] is True
+        assert state == {"type": "knx", "loaded": True, "project": held, "connection": None}
         assert await editor.next("result") == {"type": "result", "id": 7, "error": None}
     assert stored == [{"info": {}}]
 
@@ -223,3 +237,52 @@ async def test_an_editor_without_the_link_is_asked_again_later(
         with contextlib.suppress(asyncio.CancelledError):
             await task
     await client.close()
+
+
+async def test_what_the_knx_integration_knows_reaches_the_editor(
+    hass: HomeAssistant, editor: _Editor, linked: tuple[EditorLink, _Manager]
+) -> None:
+    # Before the KNX integration is set up: nothing used, no values.
+    assert await editor.next("usage") == {"type": "usage", "group_addresses": {}}
+    assert await editor.next("values") == {"type": "values", "telegrams": []}
+    used = {"2563": {"users": [{"kind": "expose", "name": "sun"}], "sends": True}}
+    with patch.object(link_module, "group_address_usage", return_value=used):
+        assert await editor.next("usage") == {"type": "usage", "group_addresses": used}
+    # Every telegram of the KNX integration, as it has it.
+    telegram = {"destination": "1/2/3", "payload": 1, "telegramtype": "GroupValueWrite"}
+    async_dispatcher_send(hass, "knx_telegram", object(), telegram)
+    assert await editor.next("telegram") == {"type": "telegram", "telegram": telegram}
+
+
+async def test_the_recorded_telegrams_are_given(
+    hass: HomeAssistant, editor: _Editor, linked: tuple[EditorLink, _Manager]
+) -> None:
+    await editor.next("knx")
+    asked: list[int] = []
+
+    async def history(_hass: HomeAssistant, hours: int) -> list[dict[str, Any]]:
+        asked.append(hours)
+        return [{"destination": "1/2/3"}]
+
+    async def not_ready(_hass: HomeAssistant, _hours: int) -> list[dict[str, Any]]:
+        raise KnxError("the KNX integration's telegram history is not ready")
+
+    assert editor.socket is not None
+    with patch.object(link_module, "async_telegram_history", history):
+        await editor.socket.send_json({"type": "telegram_history", "id": 3, "hours": 6})
+        assert await editor.next("result") == {
+            "type": "result",
+            "id": 3,
+            "error": None,
+            "telegrams": [{"destination": "1/2/3"}],
+        }
+        # Kept within a month.
+        await editor.socket.send_json({"type": "telegram_history", "id": 4, "hours": 99999})
+        await editor.next("result")
+    assert asked == [6, 24 * 31]
+    with patch.object(link_module, "async_telegram_history", not_ready):
+        await editor.socket.send_json({"type": "telegram_history", "id": 5})
+        result = await editor.next("result")
+    assert result["error"] == "the KNX integration's telegram history is not ready"
+    await editor.socket.send_json({"type": "telegram_history", "id": 6, "hours": "x"})
+    assert (await editor.next("result"))["error"]

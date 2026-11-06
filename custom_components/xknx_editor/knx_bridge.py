@@ -10,15 +10,25 @@ is in this module, so a change there is a change here only.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Mapping
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.core import callback as ha_callback
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
 
 # ``KNX_MODULE_KEY`` of the KNX integration (``HassKey("knx")``); its module is not imported, so
 # this integration loads without the KNX integration's requirements.
 _KNX_MODULE_KEY = "knx"
+# ``SIGNAL_KNX_TELEGRAM`` of the KNX integration: (telegram, its dict) of each telegram.
+_SIGNAL_TELEGRAM = "knx_telegram"
+# The most telegrams a history gives.
+_HISTORY_LIMIT = 50_000
 # What the editor's project has to have to be taken (xknxproject's ``KNXProject``).
 _SECTIONS = {
     "info": dict,
@@ -54,6 +64,130 @@ def project_info(hass: HomeAssistant) -> dict[str, Any] | None:
     if not isinstance(info, dict):
         return None
     return {key: info.get(key) for key in _INFO}
+
+
+def connection_info(hass: HomeAssistant) -> dict[str, Any] | None:
+    """How the KNX integration reaches the bus: {type ("routing" or "tunneling"), host, port}."""
+    knx = _knx(hass)
+    entry = getattr(knx, "entry", None)
+    data = getattr(entry, "data", None)
+    if not isinstance(data, Mapping):
+        return None
+    kind = str(data.get("connection_type") or "")
+    if kind.startswith("routing"):
+        return {
+            "type": "routing",
+            "host": data.get("multicast_group"),
+            "port": data.get("multicast_port"),
+        }
+    return {"type": "tunneling", "host": data.get("host"), "port": data.get("port")}
+
+
+# The xknx devices the KNX integration sends with on its own, and what they are for the editor.
+_SENDING_DEVICES = {
+    "ExposeSensor": "expose",
+    "TimeDevice": "time",
+    "DateDevice": "time",
+    "DateTimeDevice": "time",
+}
+
+
+def group_address_usage(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
+    """What Home Assistant does with each group address, by its raw address (as text): its users
+    (entities, exposes, the time server) and whether Home Assistant sends to it."""
+    knx = _knx(hass)
+    if knx is None or not hasattr(knx, "get_group_address_entities"):
+        return {}
+    from xknx.telegram.address import GroupAddress
+
+    def raw_of(address: object) -> int | None:
+        if isinstance(address, GroupAddress):
+            return address.raw
+        try:
+            return GroupAddress(str(address)).raw
+        except Exception:  # an internal address ("i-…") or none
+            return None
+
+    usage: dict[int, dict[str, Any]] = {}
+
+    def entry(raw: int) -> dict[str, Any]:
+        return usage.setdefault(raw, {"users": [], "sends": False})
+
+    registry = er.async_get(hass)
+    for address, entities in knx.get_group_address_entities().items():
+        if (raw := raw_of(address)) is None:
+            continue
+        for entity in entities:
+            entity_id = registry.async_get_entity_id(entity["platform"], "knx", entity["unique_id"])
+            state = hass.states.get(entity_id) if entity_id is not None else None
+            registered = registry.async_get(entity_id) if entity_id is not None else None
+            name = (
+                state.name
+                if state is not None
+                else (registered.name or registered.original_name)
+                if registered is not None
+                else None
+            )
+            entry(raw)["users"].append(
+                {
+                    "kind": "entity",
+                    "entity_id": entity_id,
+                    "name": name,
+                    "platform": entity["platform"],
+                    "state": state.state if state is not None else None,
+                    "ui": entity["ui"],
+                    "disabled": entity["disabled"],
+                }
+            )
+    for device in list(knx.xknx.devices):
+        kind = _SENDING_DEVICES.get(type(device).__name__)
+        for remote_value in device._iter_remote_values():
+            # Where the device writes: an entity's command, an expose, the time server.
+            if (raw := raw_of(remote_value.group_address)) is None:
+                continue
+            entry(raw)["sends"] = True
+            if kind is not None:
+                entry(raw)["users"].append({"kind": kind, "name": device.name})
+    return {str(raw): value for raw, value in sorted(usage.items())}
+
+
+def latest_telegrams(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """The last telegram with a value of each group address the KNX integration saw."""
+    knx = _knx(hass)
+    telegrams = getattr(getattr(knx, "telegrams", None), "last_ga_telegrams", None)
+    return [dict(t) for t in telegrams.values()] if isinstance(telegrams, dict) else []
+
+
+def subscribe_telegrams(
+    hass: HomeAssistant, callback: Callable[[dict[str, Any]], None]
+) -> Callable[[], None]:
+    """Call ``callback`` with each telegram the KNX integration sends or receives (its dict, as
+    its group monitor shows it) until the returned function is called."""
+
+    # In the event loop, where the caller's queue lives (not in an executor thread).
+    @ha_callback
+    def received(_telegram: object, telegram_dict: dict[str, Any]) -> None:
+        callback(dict(telegram_dict))
+
+    return async_dispatcher_connect(hass, _SIGNAL_TELEGRAM, received)
+
+
+async def async_telegram_history(hass: HomeAssistant, hours: int) -> list[dict[str, Any]]:
+    """The telegrams the KNX integration recorded in the last ``hours`` hours, oldest first."""
+    knx = _knx(hass)
+    telegrams = getattr(knx, "telegrams", None)
+    store = getattr(telegrams, "store", None)
+    if telegrams is None or store is None:
+        raise KnxError("the KNX integration's telegram history is not ready")
+    from knx_telegram_store import TelegramQuery
+
+    query = TelegramQuery(
+        start_time=dt_util.now() - timedelta(hours=hours),
+        limit=_HISTORY_LIMIT,
+        order_descending=False,
+    )
+    result = await store.query(query, flush_first=True)
+    return [dict(telegrams.model_to_dict(t)) for t in result.telegrams]
 
 
 def _check(project: Any) -> dict[str, Any]:

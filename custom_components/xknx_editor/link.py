@@ -1,15 +1,21 @@
-"""The link to the editor: the editor's project for Home Assistant's KNX integration.
+"""The link to the editor: the editor's project for Home Assistant's KNX integration, and what
+the KNX integration knows for the editor.
 
 While the editor runs, the integration signs in to it (as its proxy does) and keeps the websocket
-``/host`` open (see ``editor_gui/web/host_link.py`` in the editor). It tells the editor the state
-of the KNX integration and the project it holds, at the start and whenever that changes, and
-stores a project the editor sends as the KNX integration's project (:mod:`.knx_bridge`). An
-editor without the link (an older version) is asked again now and then.
+``/host`` open (see ``editor_gui/web/host_link.py`` in the editor). It tells the editor
+- the state of the KNX integration, the project it holds and its connection (``knx``),
+- what Home Assistant does with each group address (``usage``),
+at the start and whenever that changes, the last value of each group address once (``values``)
+and every telegram of the KNX integration (``telegram``). It stores a project the editor sends as
+the KNX integration's project and answers a request for the recorded telegrams
+(``telegram_history``). An editor without the link (an older version) is asked again now and
+then.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from typing import TYPE_CHECKING, Any
@@ -20,7 +26,17 @@ from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import HomeAssistant
 
 from .const import EDITOR_COOKIE
-from .knx_bridge import KnxError, async_set_project, knx_loaded, project_info
+from .knx_bridge import (
+    KnxError,
+    async_set_project,
+    async_telegram_history,
+    connection_info,
+    group_address_usage,
+    knx_loaded,
+    latest_telegrams,
+    project_info,
+    subscribe_telegrams,
+)
 
 if TYPE_CHECKING:
     from .manager import EditorManager
@@ -35,6 +51,8 @@ _POLL_SECONDS = 5.0
 _WAIT_SECONDS = 5.0
 _RETRY_SECONDS = 60.0
 _TIMEOUT = ClientTimeout(total=30)
+# The most hours of recorded telegrams the editor gets.
+_MAX_HISTORY_HOURS = 24 * 31
 
 
 class EditorLink:
@@ -52,6 +70,7 @@ class EditorLink:
             "type": "knx",
             "loaded": knx_loaded(self.hass),
             "project": project_info(self.hass),
+            "connection": connection_info(self.hass),
         }
 
     async def async_run(self) -> None:
@@ -93,47 +112,78 @@ class EditorLink:
             heartbeat=30,
             timeout=aiohttp.ClientWSTimeout(ws_receive=None, ws_close=10),
         ) as socket:
-            await socket.send_json(
-                {
-                    "type": "hello",
-                    "protocol": PROTOCOL,
-                    "integration": self.version,
-                    "home_assistant": HA_VERSION,
-                }
+            # Everything goes out in order through one sender.
+            outbox: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+
+            async def send() -> None:
+                while True:
+                    await socket.send_json(await outbox.get())
+
+            sender = asyncio.create_task(send())
+            unsubscribe = subscribe_telegrams(
+                self.hass, lambda t: outbox.put_nowait({"type": "telegram", "telegram": t})
             )
-            self.connected = True
-            _LOGGER.debug("Linked to the editor")
-            reported: dict[str, Any] | None = None
+            try:
+                await self._async_talk(socket, outbox, run)
+            finally:
+                unsubscribe()
+                sender.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await sender
 
-            async def report() -> None:
-                nonlocal reported
-                state = self.knx_state()
-                if state != reported:
-                    reported = state
-                    await socket.send_json(state)
+    async def _async_talk(
+        self,
+        socket: aiohttp.ClientWebSocketResponse,
+        outbox: asyncio.Queue[dict[str, Any]],
+        run: int,
+    ) -> None:
+        outbox.put_nowait(
+            {
+                "type": "hello",
+                "protocol": PROTOCOL,
+                "integration": self.version,
+                "home_assistant": HA_VERSION,
+            }
+        )
+        self.connected = True
+        _LOGGER.debug("Linked to the editor")
+        reported: dict[str, Any] | None = None
+        used: dict[str, Any] | None = None
 
-            await report()
-            greeted = False
-            while self.manager.run == run and not socket.closed:
-                try:
-                    message = await socket.receive(timeout=_POLL_SECONDS)
-                except TimeoutError:
-                    await report()
-                    continue
-                if message.type in (WSMsgType.CLOSE, WSMsgType.CLOSED, WSMsgType.ERROR):
-                    if not greeted:
-                        # Not let in, or an editor without the link.
-                        raise aiohttp.ClientError(f"the editor closed the link ({message.data})")
-                    return
-                if message.type is not WSMsgType.TEXT:
-                    continue
-                data = json.loads(message.data)
-                greeted = greeted or (isinstance(data, dict) and data.get("type") == "hello")
-                await self._async_handle(socket, data, report)
-                await report()
+        def report() -> None:
+            nonlocal reported, used
+            state = self.knx_state()
+            if state != reported:
+                reported = state
+                outbox.put_nowait(state)
+            usage = group_address_usage(self.hass)
+            if usage != used:
+                used = usage
+                outbox.put_nowait({"type": "usage", "group_addresses": usage})
+
+        report()
+        outbox.put_nowait({"type": "values", "telegrams": latest_telegrams(self.hass)})
+        greeted = False
+        while self.manager.run == run and not socket.closed:
+            try:
+                message = await socket.receive(timeout=_POLL_SECONDS)
+            except TimeoutError:
+                report()
+                continue
+            if message.type in (WSMsgType.CLOSE, WSMsgType.CLOSED, WSMsgType.ERROR):
+                if not greeted:
+                    # Not let in, or an editor without the link.
+                    raise aiohttp.ClientError(f"the editor closed the link ({message.data})")
+                return
+            if message.type is not WSMsgType.TEXT:
+                continue
+            data = json.loads(message.data)
+            greeted = greeted or (isinstance(data, dict) and data.get("type") == "hello")
+            await self._async_handle(outbox, data, report)
+            report()
 
     async def _async_handle(
-        self, socket: aiohttp.ClientWebSocketResponse, message: Any, report: Any
+        self, outbox: asyncio.Queue[dict[str, Any]], message: Any, report: Any
     ) -> None:
         if not isinstance(message, dict):
             return
@@ -154,5 +204,17 @@ class EditorLink:
                 _LOGGER.exception("The KNX integration did not take the editor's project")
                 error = str(failure) or type(failure).__name__
             # The new project first, then the answer (the editor links the project by it).
-            await report()
-            await socket.send_json({"type": "result", "id": message.get("id"), "error": error})
+            report()
+            outbox.put_nowait({"type": "result", "id": message.get("id"), "error": error})
+        elif kind == "telegram_history":
+            answer: dict[str, Any] = {"type": "result", "id": message.get("id"), "error": None}
+            try:
+                hours = int(message.get("hours", 24))
+                hours = max(1, min(hours, _MAX_HISTORY_HOURS))
+                answer["telegrams"] = await async_telegram_history(self.hass, hours)
+            except (KnxError, ValueError, TypeError) as failure:
+                answer["error"] = str(failure)
+            except Exception as failure:  # the editor shows why
+                _LOGGER.exception("The KNX integration's telegrams could not be read")
+                answer["error"] = str(failure) or type(failure).__name__
+            outbox.put_nowait(answer)
