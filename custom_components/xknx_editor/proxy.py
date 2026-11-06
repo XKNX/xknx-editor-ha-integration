@@ -36,21 +36,28 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-# Request headers the proxy sets itself or leaves out.
+# Request headers the proxy sets itself or leaves out (lower case: the browser's spelling varies).
+# The browser's address is left out too: the editor answers only this proxy, by its own address.
 _REQUEST_HEADERS_FILTER = {
-    hdrs.HOST,
-    hdrs.COOKIE,
-    hdrs.AUTHORIZATION,
-    hdrs.CONTENT_LENGTH,
-    hdrs.CONTENT_ENCODING,
-    hdrs.TRANSFER_ENCODING,
-    hdrs.ACCEPT_ENCODING,
-    hdrs.CONNECTION,
-    hdrs.UPGRADE,
-    hdrs.SEC_WEBSOCKET_EXTENSIONS,
-    hdrs.SEC_WEBSOCKET_PROTOCOL,
-    hdrs.SEC_WEBSOCKET_VERSION,
-    hdrs.SEC_WEBSOCKET_KEY,
+    name.lower()
+    for name in (
+        hdrs.HOST,
+        hdrs.COOKIE,
+        hdrs.AUTHORIZATION,
+        hdrs.CONTENT_LENGTH,
+        hdrs.CONTENT_ENCODING,
+        hdrs.TRANSFER_ENCODING,
+        hdrs.ACCEPT_ENCODING,
+        hdrs.CONNECTION,
+        hdrs.UPGRADE,
+        hdrs.SEC_WEBSOCKET_EXTENSIONS,
+        hdrs.SEC_WEBSOCKET_PROTOCOL,
+        hdrs.SEC_WEBSOCKET_VERSION,
+        hdrs.SEC_WEBSOCKET_KEY,
+        hdrs.X_FORWARDED_FOR,
+        hdrs.FORWARDED,
+        "X-Real-IP",
+    )
 }
 # Response headers aiohttp sets again; the editor's cookies stay with the proxy.
 _RESPONSE_HEADERS_FILTER = {
@@ -172,7 +179,7 @@ class McpProxyView(HomeAssistantView):
         headers = CIMultiDict(
             (name, value)
             for name, value in request.headers.items()
-            if name not in _REQUEST_HEADERS_FILTER
+            if name.lower() not in _REQUEST_HEADERS_FILTER
         )
         headers[hdrs.AUTHORIZATION] = f"Bearer {process.mcp_token}"
         try:
@@ -286,7 +293,7 @@ def _request_headers(request: web.Request, editor_cookie: str) -> CIMultiDict[st
     headers = CIMultiDict(
         (name, value)
         for name, value in request.headers.items()
-        if name not in _REQUEST_HEADERS_FILTER
+        if name.lower() not in _REQUEST_HEADERS_FILTER
     )
     headers[hdrs.COOKIE] = f"{EDITOR_COOKIE}={editor_cookie}"
     headers[hdrs.X_FORWARDED_HOST] = request.headers.get(hdrs.X_FORWARDED_HOST, request.host)

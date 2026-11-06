@@ -135,10 +135,20 @@ def options() -> dict[str, object]:
 
 
 @pytest.fixture
+def http_config() -> dict[str, object]:
+    """Home Assistant's HTTP configuration (a test sets another by parametrizing this)."""
+    return {}
+
+
+@pytest.fixture
 async def manager(
-    hass: HomeAssistant, editor: FakeEditor, options: dict[str, object]
+    hass: HomeAssistant,
+    editor: FakeEditor,
+    options: dict[str, object],
+    http_config: dict[str, object],
 ) -> AsyncGenerator[EditorManager]:
     """The integration set up, with the fake editor running in place of the real one."""
+    assert await async_setup_component(hass, "http", {"http": http_config})
 
     async def run(self: EditorManager) -> None:
         self.process = editor  # type: ignore[assignment]
@@ -208,6 +218,32 @@ async def test_page_through_the_proxy(
     manager.run += 1
     await client.get(UI_URL, cookies={SESSION_COOKIE: session})
     assert editor.logins == 3
+
+
+@pytest.mark.parametrize(
+    "http_config", [{"use_x_forwarded_for": True, "trusted_proxies": ["127.0.0.1"]}]
+)
+async def test_the_browsers_address_stays_with_the_proxy(
+    hass: HomeAssistant,
+    manager: EditorManager,
+    editor: FakeEditor,
+    hass_client_no_auth: ClientSessionGenerator,
+    hass_ws_client: WebSocketGenerator,
+) -> None:
+    # Behind a reverse proxy in front of Home Assistant: the browser's address comes along. The
+    # editor answers only this proxy, by the address it connects from, so it gets none of it.
+    forwarded = {
+        "X-Forwarded-For": "192.0.2.1",
+        "Forwarded": "for=192.0.2.1",
+        "x-real-ip": "192.0.2.1",
+    }
+    session = await session_for(hass_ws_client, hass)
+    client = await hass_client_no_auth()
+    response = await client.get(UI_URL, cookies={SESSION_COOKIE: session}, headers=forwarded)
+    assert response.status == 200
+    seen = {name.lower() for name in editor.seen[-1]}
+    assert not seen & {name.lower() for name in forwarded}
+    assert "x-forwarded-host" in seen
 
 
 async def test_upload_through_the_proxy(
