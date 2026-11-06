@@ -2,5 +2,8 @@
 # itself), and the frontend package that release's frontend integration requires.
 pytest-homeassistant==2026.11.0
 home-assistant-frontend==20261028.4
+# The requirements of that release's KNX integration the tests of knx_bridge.py load it with.
+xknx==4.1.0
+xknxproject==3.10.0
 # Coverage for Codecov (pytest --cov)
 pytest-cov

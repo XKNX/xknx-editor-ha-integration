@@ -32,6 +32,7 @@ from .const import (
     REQUIREMENTS_URL,
     STATIC_URL,
 )
+from .link import EditorLink
 from .manager import EditorManager
 from .proxy import EditorProxyView, McpProxyView
 
@@ -72,6 +73,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: XknxEditorConfigEntry) -
     )
     entry.runtime_data = manager
     entry.async_create_background_task(hass, manager.async_run(), f"{DOMAIN} editor")
+    # The editor's project for Home Assistant's KNX integration.
+    manager.link = EditorLink(hass, manager, str(integration.version or ""))
+    entry.async_create_background_task(hass, manager.link.async_run(), f"{DOMAIN} link")
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     await panel_custom.async_register_panel(
         hass,

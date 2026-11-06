@@ -7,6 +7,7 @@ import asyncio
 import logging
 import secrets
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import aiohttp
 from homeassistant.core import HomeAssistant
@@ -19,6 +20,9 @@ from .dotnet import DotnetError, DotnetInstall
 from .environment import EditorEnvironment, InstallError
 from .process import EditorProcess, StartError
 from .proxy import Sessions
+
+if TYPE_CHECKING:
+    from .link import EditorLink
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,6 +64,8 @@ class EditorManager:
             cookie_jar=aiohttp.DummyCookieJar(), auto_decompress=False
         )
         self._stopping = False
+        # The link to the editor (set by the config entry), for diagnostics.
+        self.link: EditorLink | None = None
 
     def _progress(self, step: str) -> None:
         self.status = step

@@ -42,4 +42,9 @@ async def async_get_config_entry_diagnostics(
             "runs": manager.run,
             "output": list(process.output) if process is not None else [],
         },
+        # The link that gives the KNX integration the editor's project, and what it holds.
+        "link": {
+            "connected": manager.link is not None and manager.link.connected,
+            "knx": manager.link.knx_state() if manager.link is not None else None,
+        },
     }
