@@ -74,16 +74,22 @@ async def async_set_project(hass: HomeAssistant, project: Any) -> None:
     if knx is None or not hasattr(knx, "project"):
         raise KnxError("the KNX integration is not set up")
     holder = knx.project
-    try:
-        lock = holder._project_lock
-        store = holder._store
-    except AttributeError as error:
-        raise KnxError(f"this version of the KNX integration is not supported: {error}") from error
-    async with lock:
-        await store.async_save(data)
-        # Loading adds to what is loaded: start from nothing, so removed group addresses go.
-        holder.initial_state()
-        await holder.load_project(knx.xknx, data=data)
+    if (set_project := getattr(holder, "async_set_project", None)) is not None:
+        # A KNX integration that takes project data from other sources itself.
+        await set_project(knx.xknx, data)
+    else:
+        try:
+            lock = holder._project_lock
+            store = holder._store
+        except AttributeError as error:
+            raise KnxError(
+                f"this version of the KNX integration is not supported: {error}"
+            ) from error
+        async with lock:
+            await store.async_save(data)
+            # Loading adds to what is loaded: start from nothing, so removed addresses go.
+            holder.initial_state()
+            await holder.load_project(knx.xknx, data=data)
     _LOGGER.debug(
         "KNX project from the editor: %s group addresses, %s devices",
         len(data["group_addresses"]),

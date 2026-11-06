@@ -148,3 +148,22 @@ async def test_a_knx_integration_without_the_parts_used(hass: HomeAssistant) -> 
     hass.data["knx"] = _Other()
     with pytest.raises(KnxError, match="not supported"):
         await async_set_project(hass, _project("1/2/3"))
+
+
+async def test_a_knx_integration_with_its_own_way_is_used(hass: HomeAssistant) -> None:
+    taken: list[Any] = []
+
+    class _Project:
+        async def async_set_project(self, xknx: Any, project: Any) -> None:
+            taken.append((xknx, project))
+
+    class _Module:
+        def __init__(self) -> None:
+            self.xknx = object()
+            self.project = _Project()
+
+    module = _Module()
+    hass.data["knx"] = module
+    project = _project("1/2/3")
+    await async_set_project(hass, project)
+    assert taken == [(module.xknx, project)]
