@@ -27,6 +27,7 @@ from homeassistant.core import HomeAssistant
 
 from .areas import AreaLinks
 from .const import EDITOR_COOKIE
+from .entities import EntityLinks
 from .knx_bridge import (
     KnxError,
     async_set_project,
@@ -65,8 +66,9 @@ class EditorLink:
         self.version = version
         # Whether the link is open now (diagnostics).
         self.connected = False
-        # The floors and areas the editor's spaces became.
+        # The floors and areas the editor's spaces became, the entities its functions became.
         self.areas = AreaLinks(hass)
+        self.entities = EntityLinks(hass)
 
     def knx_state(self) -> dict[str, Any]:
         return {
@@ -153,10 +155,12 @@ class EditorLink:
         reported: dict[str, Any] | None = None
         used: dict[str, Any] | None = None
         places: dict[str, Any] | None = None
+        made: dict[str, Any] | None = None
         await self.areas.async_load()
+        await self.entities.async_load()
 
         def report() -> None:
-            nonlocal reported, used, places
+            nonlocal reported, used, places, made
             state = self.knx_state()
             if state != reported:
                 reported = state
@@ -169,6 +173,10 @@ class EditorLink:
             if snapshot != places:
                 places = snapshot
                 outbox.put_nowait(snapshot)
+            entity_links = self.entities.snapshot()
+            if entity_links != made:
+                made = entity_links
+                outbox.put_nowait(entity_links)
 
         report()
         outbox.put_nowait({"type": "values", "telegrams": latest_telegrams(self.hass)})
@@ -229,6 +237,22 @@ class EditorLink:
             # The new floors and areas first, then the answer.
             report()
             outbox.put_nowait(result)
+        elif kind in ("check_entities", "create_entities"):
+            reply: dict[str, Any] = {"type": "result", "id": message.get("id"), "error": None}
+            try:
+                if kind == "check_entities":
+                    reply["checks"] = self.entities.check(message.get("entities"))
+                else:
+                    created, errors = await self.entities.async_create(message.get("entities"))
+                    reply["created"], reply["errors"] = created, errors
+            except ValueError as failure:
+                reply["error"] = str(failure)
+            except Exception as failure:  # the editor shows why
+                _LOGGER.exception("The entities could not be checked or created")
+                reply["error"] = str(failure) or type(failure).__name__
+            # The new entities first (their links and usage), then the answer.
+            report()
+            outbox.put_nowait(reply)
         elif kind == "telegram_history":
             answer: dict[str, Any] = {"type": "result", "id": message.get("id"), "error": None}
             try:

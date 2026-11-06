@@ -312,3 +312,38 @@ async def test_floors_and_areas_for_the_editor(
     await editor.socket.send_json({"type": "apply_areas", "id": 10, "floors": "x", "areas": []})
     result = await editor.next("result")
     assert result["id"] == 10 and result["error"]
+
+
+async def test_entities_are_checked_and_created_for_the_editor(
+    hass: HomeAssistant, editor: _Editor, linked: tuple[EditorLink, _Manager]
+) -> None:
+    link, _manager = linked
+    assert await editor.next("entity_links") == {"type": "entity_links", "links": {}}
+    candidate = {"key": "g:function:1", "platform": "light", "name": "Ceiling", "knx": {}}
+
+    async def create(_entities: Any) -> tuple[dict[str, str], dict[str, str]]:
+        return {"g:function:1": "light.ceiling"}, {}
+
+    assert editor.socket is not None
+    with (
+        patch.object(link.entities, "check", return_value={"g:function:1": None}),
+        patch.object(link.entities, "async_create", create),
+    ):
+        await editor.socket.send_json({"type": "check_entities", "id": 4, "entities": [candidate]})
+        assert await editor.next("result") == {
+            "type": "result",
+            "id": 4,
+            "error": None,
+            "checks": {"g:function:1": None},
+        }
+        await editor.socket.send_json({"type": "create_entities", "id": 5, "entities": [candidate]})
+        assert await editor.next("result") == {
+            "type": "result",
+            "id": 5,
+            "error": None,
+            "created": {"g:function:1": "light.ceiling"},
+            "errors": {},
+        }
+    await editor.socket.send_json({"type": "check_entities", "id": 6, "entities": "x"})
+    result = await editor.next("result")
+    assert result["id"] == 6 and result["error"]

@@ -190,6 +190,60 @@ async def async_telegram_history(hass: HomeAssistant, hours: int) -> list[dict[s
     return [dict(telegrams.model_to_dict(t)) for t in result.telegrams]
 
 
+def validate_entity(
+    hass: HomeAssistant, platform: str, name: str, knx_config: Any
+) -> dict[str, Any]:
+    """The KNX integration's own check of an entity configuration, as its panel makes it;
+    raises KnxError with why it does not take it."""
+    if not knx_loaded(hass):
+        raise KnxError("the KNX integration is not set up")
+    try:
+        from homeassistant.components.knx.storage.entity_store_validation import (
+            EntityStoreValidationException,
+            validate_entity_data,
+        )
+    except ImportError as error:
+        raise KnxError(f"this version of the KNX integration is not supported: {error}") from error
+    try:
+        return validate_entity_data(
+            {
+                "platform": platform,
+                "data": {
+                    "entity": {"name": name, "device_info": None, "entity_category": None},
+                    "knx": knx_config,
+                },
+            }
+        )
+    except EntityStoreValidationException as error:
+        raise KnxError(_validation_text(error.validation_error)) from error
+
+
+def _validation_text(validation_error: Any) -> str:
+    """The KNX integration's validation errors as one text: each with where it is."""
+    errors = validation_error.get("errors") if isinstance(validation_error, dict) else None
+    if not isinstance(errors, list) or not errors:
+        return str(validation_error)
+    parts = []
+    for error in errors:
+        path = ".".join(str(p) for p in error.get("path") or [] if p != "data")
+        message = str(error.get("error_message", ""))
+        parts.append(f"{path}: {message}" if path else message)
+    return "; ".join(parts)
+
+
+async def async_create_entity(hass: HomeAssistant, validated: dict[str, Any]) -> str:
+    """Create an entity the KNX integration validated (validate_entity), as its panel does;
+    returns its entity id."""
+    knx = _knx(hass)
+    config_store = getattr(knx, "config_store", None)
+    if config_store is None:
+        raise KnxError("the KNX integration is not set up")
+    entity_id = await config_store.create_entity(validated["platform"], validated["data"])
+    if not entity_id:
+        raise KnxError("the KNX integration created no entity")
+    return str(entity_id)
+
+
 def _check(project: Any) -> dict[str, Any]:
     if not isinstance(project, dict):
         raise KnxError("the project is not an object")
