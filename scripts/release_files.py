@@ -145,6 +145,9 @@ def build(editor: Path, base_url: str, out: Path) -> Path:
     # The builds run in the editor checkout: a relative folder would be taken from there.
     out = out.resolve()
     out.mkdir(parents=True, exist_ok=True)
+    # The requirements file names every wheel in ``out``: none of an earlier build stays.
+    for stale in out.glob("*.whl"):
+        stale.unlink()
     members = sorted(p.parent for p in editor.glob("packages/*/pyproject.toml"))
     members += sorted(p.parent for p in editor.glob("apps/*/pyproject.toml"))
     for member in members:

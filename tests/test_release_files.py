@@ -116,7 +116,9 @@ def test_the_wheels_go_into_a_relative_out_folder(
     monkeypatch.setattr(release_files, "_run", run)
     monkeypatch.setattr(release_files, "build_helpers", lambda _e, target: target.write_bytes(b"z"))
     integration = tmp_path / "integration"
-    integration.mkdir()
+    (integration / "release").mkdir(parents=True)
+    # A wheel of an earlier build (another editor version) is not named again.
+    (integration / "release" / "xknxeditor_gui-0.8.0-py3-none-any.whl").write_bytes(b"old")
     monkeypatch.chdir(integration)
 
     requirements = release_files.build(editor, "https://example.com/0.9.0", Path("release"))
