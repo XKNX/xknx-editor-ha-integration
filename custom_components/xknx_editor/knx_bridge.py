@@ -12,12 +12,14 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Mapping
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.core import callback as ha_callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.storage import STORAGE_DIR
 from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
@@ -242,6 +244,151 @@ async def async_create_entity(hass: HomeAssistant, validated: dict[str, Any]) ->
     if not entity_id:
         raise KnxError("the KNX integration created no entity")
     return str(entity_id)
+
+
+def entity_knx_config(hass: HomeAssistant, entity_id: str) -> dict[str, Any] | None:
+    """The ``knx`` part of the stored configuration of an entity made in the KNX panel."""
+    config_store = getattr(_knx(hass), "config_store", None)
+    if config_store is None:
+        return None
+    try:
+        config = config_store.get_entity_config(entity_id)
+    except Exception:  # not one of the panel's (YAML), or gone
+        return None
+    knx_config = config.get("data", {}).get("knx") if isinstance(config, dict) else None
+    return dict(knx_config) if isinstance(knx_config, dict) else None
+
+
+async def async_update_entity_knx(hass: HomeAssistant, entity_id: str, knx_config: Any) -> None:
+    """Give an entity of the KNX panel new group addresses (its name and the rest stay), checked
+    by the KNX integration as its panel checks them."""
+    config_store = getattr(_knx(hass), "config_store", None)
+    if config_store is None:
+        raise KnxError("the KNX integration is not set up")
+    try:
+        current = config_store.get_entity_config(entity_id)
+    except Exception as error:
+        raise KnxError(f"{entity_id} is not an entity of the KNX panel: {error}") from error
+    if not isinstance(knx_config, dict):
+        raise KnxError("not a KNX configuration")
+    from homeassistant.components.knx.storage.entity_store_validation import (
+        EntityStoreValidationException,
+        validate_entity_data,
+    )
+
+    data = current["data"]
+    # Its own entity part (name, device, category) stays; the group addresses are replaced.
+    knx_new = {**(data.get("knx") or {}), **knx_config}
+    try:
+        validated = validate_entity_data(
+            {
+                "platform": current["platform"],
+                "data": {"entity": data.get("entity") or {}, "knx": knx_new},
+            }
+        )
+    except EntityStoreValidationException as error:
+        raise KnxError(_validation_text(error.validation_error)) from error
+    await config_store.update_entity(current["platform"], entity_id, validated["data"])
+
+
+async def async_delete_entity(hass: HomeAssistant, entity_id: str) -> None:
+    """Remove an entity made in the KNX panel."""
+    config_store = getattr(_knx(hass), "config_store", None)
+    if config_store is None:
+        raise KnxError("the KNX integration is not set up")
+    await config_store.delete_entity(entity_id)
+
+
+def time_server(hass: HomeAssistant) -> dict[str, str | None] | None:
+    """The group addresses the KNX integration's time server sends time, date and date with
+    time to (None: none); None without the KNX integration."""
+    config_store = getattr(_knx(hass), "config_store", None)
+    if config_store is None:
+        return None
+    try:
+        stored = config_store.get_time_server_config()
+    except Exception:
+        return None
+    result: dict[str, str | None] = {}
+    for kind in ("time", "date", "datetime"):
+        entry = stored.get(kind) if isinstance(stored, dict) else None
+        result[kind] = entry.get("write") if isinstance(entry, dict) else None
+    return result
+
+
+async def async_set_time_server(hass: HomeAssistant, addresses: Any) -> None:
+    """Let the KNX integration's time server send to these group addresses ({time, date,
+    datetime}: a printed address or None), as its panel does."""
+    config_store = getattr(_knx(hass), "config_store", None)
+    if config_store is None:
+        raise KnxError("the KNX integration is not set up")
+    if not isinstance(addresses, dict):
+        raise KnxError("not a time server configuration")
+    from homeassistant.components.knx.storage.entity_store_validation import (
+        EntityStoreValidationException,
+    )
+    from homeassistant.components.knx.storage.time_server import validate_time_server_data
+
+    data = {
+        kind: {"write": address}
+        for kind in ("time", "date", "datetime")
+        if isinstance(address := addresses.get(kind), str) and address
+    }
+    try:
+        config = validate_time_server_data(data)
+    except EntityStoreValidationException as error:
+        raise KnxError(_validation_text(error.validation_error)) from error
+    await config_store.update_time_server_config(config)
+
+
+# Where the KNX integration keeps an uploaded keyring, below the storage folder.
+_KEYRING_FILE = "knx/keyring.knxkeys"
+
+
+def keyring_allowed(hass: HomeAssistant) -> str | None:
+    """Why the editor's keyring cannot be the KNX integration's (None: it can). A secure
+    connection takes its own credentials from the keyring: that one stays the user's."""
+    knx = _knx(hass)
+    entry = getattr(knx, "entry", None)
+    if entry is None:
+        return "the KNX integration is not set up"
+    if str(entry.data.get("connection_type", "")).endswith("secure"):
+        return "the KNX integration connects with KNX Secure: change its keyring in its options"
+    return None
+
+
+async def async_set_keyring(hass: HomeAssistant, keyring: bytes, password: str) -> None:
+    """Make the editor's keyring (its Data Secure group keys) the KNX integration's, as an
+    upload in its options does, and load the integration again."""
+    if (reason := keyring_allowed(hass)) is not None:
+        raise KnxError(reason)
+    knx = _knx(hass)
+    entry = knx.entry
+    from xknx.exceptions.exception import InvalidSecureConfiguration
+    from xknx.secure.keyring import sync_load_keyring
+
+    path = Path(hass.config.path(STORAGE_DIR, _KEYRING_FILE))
+
+    def write() -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        partial = path.with_suffix(".partial")
+        partial.write_bytes(keyring)
+        try:
+            sync_load_keyring(path=partial, password=password)
+        except InvalidSecureConfiguration:
+            partial.unlink(missing_ok=True)
+            raise
+        partial.replace(path)
+
+    try:
+        await hass.async_add_executor_job(write)
+    except InvalidSecureConfiguration as error:
+        raise KnxError(f"the keyring is not valid: {error}") from error
+    hass.config_entries.async_update_entry(
+        entry,
+        data={**entry.data, "knxkeys_filename": _KEYRING_FILE, "knxkeys_password": password},
+    )
+    hass.config_entries.async_schedule_reload(entry.entry_id)
 
 
 def _check(project: Any) -> dict[str, Any]:

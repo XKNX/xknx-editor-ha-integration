@@ -15,6 +15,8 @@ then.
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import contextlib
 import json
 import logging
@@ -30,14 +32,18 @@ from .const import EDITOR_COOKIE
 from .entities import EntityLinks
 from .knx_bridge import (
     KnxError,
+    async_set_keyring,
     async_set_project,
+    async_set_time_server,
     async_telegram_history,
     connection_info,
     group_address_usage,
+    keyring_allowed,
     knx_loaded,
     latest_telegrams,
     project_info,
     subscribe_telegrams,
+    time_server,
 )
 
 if TYPE_CHECKING:
@@ -76,6 +82,9 @@ class EditorLink:
             "loaded": knx_loaded(self.hass),
             "project": project_info(self.hass),
             "connection": connection_info(self.hass),
+            # Where its time server sends time and date to; why the editor's keys cannot be its.
+            "time_server": time_server(self.hass),
+            "keyring_refused": keyring_allowed(self.hass),
         }
 
     async def async_run(self) -> None:
@@ -237,14 +246,37 @@ class EditorLink:
             # The new floors and areas first, then the answer.
             report()
             outbox.put_nowait(result)
-        elif kind in ("check_entities", "create_entities"):
+        elif kind in (
+            "check_entities",
+            "create_entities",
+            "update_entities",
+            "delete_entities",
+            "set_time_server",
+            "set_keyring",
+        ):
             reply: dict[str, Any] = {"type": "result", "id": message.get("id"), "error": None}
             try:
                 if kind == "check_entities":
                     reply["checks"] = self.entities.check(message.get("entities"))
-                else:
+                elif kind == "create_entities":
                     created, errors = await self.entities.async_create(message.get("entities"))
                     reply["created"], reply["errors"] = created, errors
+                elif kind == "update_entities":
+                    updated, errors = await self.entities.async_update(message.get("entities"))
+                    reply["updated"], reply["errors"] = updated, errors
+                elif kind == "delete_entities":
+                    removed, errors = await self.entities.async_delete(message.get("keys"))
+                    reply["removed"], reply["errors"] = removed, errors
+                elif kind == "set_time_server":
+                    await async_set_time_server(self.hass, message.get("addresses"))
+                else:
+                    await async_set_keyring(
+                        self.hass,
+                        base64.b64decode(str(message.get("keyring", "")), validate=True),
+                        str(message.get("password", "")),
+                    )
+            except (KnxError, binascii.Error) as failure:
+                reply["error"] = str(failure)
             except ValueError as failure:
                 reply["error"] = str(failure)
             except Exception as failure:  # the editor shows why

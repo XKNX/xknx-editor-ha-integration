@@ -19,6 +19,12 @@ from custom_components.xknx_editor.knx_bridge import KnxError
 from custom_components.xknx_editor.link import PROTOCOL, EditorLink
 
 PASSWORD = "editor-password"
+# What the state of the KNX integration says while there is none.
+_WITHOUT_KNX = {
+    "connection": None,
+    "time_server": None,
+    "keyring_refused": "the KNX integration is not set up",
+}
 
 pytestmark = pytest.mark.usefixtures("socket_enabled")
 
@@ -117,7 +123,7 @@ async def test_the_link_reports_the_knx_integration(
         "type": "knx",
         "loaded": False,
         "project": None,
-        "connection": None,
+        **_WITHOUT_KNX,
     }
     assert link.connected
 
@@ -131,7 +137,7 @@ async def test_the_link_reports_the_knx_integration(
             "type": "knx",
             "loaded": True,
             "project": held,
-            "connection": None,
+            **_WITHOUT_KNX,
         }
 
 
@@ -156,7 +162,7 @@ async def test_the_editors_project_goes_to_the_knx_integration(
         # loaded before).
         while (state := await editor.next("knx"))["project"] is None:
             assert state["loaded"] is True
-        assert state == {"type": "knx", "loaded": True, "project": held, "connection": None}
+        assert state == {"type": "knx", "loaded": True, "project": held, **_WITHOUT_KNX}
         assert await editor.next("result") == {"type": "result", "id": 7, "error": None}
     assert stored == [{"info": {}}]
 
@@ -318,7 +324,11 @@ async def test_entities_are_checked_and_created_for_the_editor(
     hass: HomeAssistant, editor: _Editor, linked: tuple[EditorLink, _Manager]
 ) -> None:
     link, _manager = linked
-    assert await editor.next("entity_links") == {"type": "entity_links", "links": {}}
+    assert await editor.next("entity_links") == {
+        "type": "entity_links",
+        "links": {},
+        "configs": {},
+    }
     candidate = {"key": "g:function:1", "platform": "light", "name": "Ceiling", "knx": {}}
 
     async def create(_entities: Any) -> tuple[dict[str, str], dict[str, str]]:
