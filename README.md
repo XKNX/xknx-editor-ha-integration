@@ -34,7 +34,7 @@ claude mcp add --transport http xknx-editor https://<your Home Assistant>/api/xk
   --header "Authorization: Bearer <token>"
 ```
 
-The editor's **AI MCP** tab shows the address and the commands for Claude Code and Codex.
+In the editor, the **MCP** menu shows the address, and the **AI/MCP** page of its settings (**MCP** > **Settings…**) shows the commands for Claude Code and Codex as well.
 
 ## Options
 
