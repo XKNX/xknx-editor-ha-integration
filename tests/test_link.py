@@ -298,7 +298,13 @@ async def test_floors_and_areas_for_the_editor(
     hass: HomeAssistant, editor: _Editor, linked: tuple[EditorLink, _Manager]
 ) -> None:
     first = await editor.next("areas")
-    assert first == {"type": "areas", "floors": [], "areas": [], "links": {}}
+    assert first == {
+        "type": "areas",
+        "location_name": hass.config.location_name,
+        "floors": [],
+        "areas": [],
+        "links": {},
+    }
     assert editor.socket is not None
     await editor.socket.send_json(
         {

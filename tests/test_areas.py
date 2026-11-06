@@ -48,8 +48,33 @@ async def test_floors_and_areas_are_created_and_linked(
     assert hass_storage["xknx_editor.areas"]["data"]["links"] == links.links
     snapshot = links.snapshot()
     assert snapshot["type"] == "areas"
+    assert snapshot["location_name"] == hass.config.location_name
     assert {"floor_id": ground.floor_id, "name": "Ground Floor", "level": 0} in snapshot["floors"]
     assert {"area_id": hall.id, "name": "Hall", "floor_id": ground.floor_id} in snapshot["areas"]
+
+
+async def test_spaces_made_from_floors_and_areas_link_to_them_as_they_are(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    floors, areas = fr.async_get(hass), ar.async_get(hass)
+    ground = floors.async_create("EG", level=0)
+    kitchen = areas.async_create("Küche", floor_id=ground.floor_id)
+    links = AreaLinks(hass)
+    # Named otherwise in the editor (a building's name in front): linked, not renamed.
+    changed = await links.async_apply(
+        [{**_floor("g:2", "Haus EG"), "floor_id": ground.floor_id}],
+        [
+            {**_area("g:3", "Küche", "g:2"), "area_id": kitchen.id},
+            # One Home Assistant no longer has: made as usual.
+            {**_area("g:4", "Bad", "g:2"), "area_id": "gone"},
+        ],
+    )
+    assert changed == 3
+    assert links.links["g:2"] == ground.floor_id and links.links["g:3"] == kitchen.id
+    assert floors.async_get_floor(ground.floor_id).name == "EG"  # type: ignore[union-attr]
+    bath = areas.async_get_area_by_name("Bad")
+    assert bath is not None and links.links["g:4"] == bath.id
+    assert bath.floor_id == ground.floor_id
 
 
 async def test_a_renamed_space_renames_its_floor_or_area(

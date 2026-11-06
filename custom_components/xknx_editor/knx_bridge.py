@@ -117,9 +117,27 @@ _SENDING_DEVICES = {
 }
 
 
+# The datapoint type of xknx's values that name none of their own.
+_REMOTE_VALUE_TYPES = {
+    "RemoteValueSwitch": "1.001",
+    "RemoteValueStep": "1.007",
+    "RemoteValueUpDown": "1.008",
+    "RemoteValueScaling": "5.001",
+}
+
+
+def _datapoint_type(remote_value: Any) -> str | None:
+    """The datapoint type an xknx value carries ("9.001"), None when it does not say."""
+    dpt_class = getattr(remote_value, "dpt_class", None)
+    if dpt_class is not None and getattr(dpt_class, "dpt_main_number", None) is not None:
+        return str(dpt_class.dpt_number_str())
+    return _REMOTE_VALUE_TYPES.get(type(remote_value).__name__)
+
+
 def group_address_usage(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
     """What Home Assistant does with each group address, by its raw address (as text): its users
-    (entities, exposes, the time server) and whether Home Assistant sends to it."""
+    (entities, exposes, the time server), whether Home Assistant sends to it, and the datapoint
+    type its KNX devices use it with ("dpt", None when they do not say)."""
     knx = _knx(hass)
     if knx is None or not hasattr(knx, "get_group_address_entities"):
         return {}
@@ -136,7 +154,7 @@ def group_address_usage(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
     usage: dict[int, dict[str, Any]] = {}
 
     def entry(raw: int) -> dict[str, Any]:
-        return usage.setdefault(raw, {"users": [], "sends": False})
+        return usage.setdefault(raw, {"users": [], "sends": False, "dpt": None})
 
     registry = er.async_get(hass)
     for address, entities in knx.get_group_address_entities().items():
@@ -167,6 +185,10 @@ def group_address_usage(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
     for device in list(knx.xknx.devices):
         kind = _SENDING_DEVICES.get(type(device).__name__)
         for remote_value in device._iter_remote_values():
+            if (dpt := _datapoint_type(remote_value)) is not None:
+                for address in remote_value.group_addresses():
+                    if (known := raw_of(address)) is not None and entry(known)["dpt"] is None:
+                        entry(known)["dpt"] = dpt
             # Where the device writes: an entity's command, an expose, the time server.
             if (raw := raw_of(remote_value.group_address)) is None:
                 continue

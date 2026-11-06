@@ -223,10 +223,15 @@ async def test_what_home_assistant_does_with_the_group_addresses(
         "ui": True,
         "disabled": False,
     }
+    # With the datapoint type the KNX devices use each address with.
     assert usage == {
-        str(_ga("0/0/1").raw): {"users": [{"kind": "time", "name": "Time"}], "sends": True},
-        str(_ga("1/2/3").raw): {"users": [kitchen], "sends": True},
-        str(_ga("1/2/4").raw): {"users": [kitchen], "sends": False},
+        str(_ga("0/0/1").raw): {
+            "users": [{"kind": "time", "name": "Time"}],
+            "sends": True,
+            "dpt": "10.001",
+        },
+        str(_ga("1/2/3").raw): {"users": [kitchen], "sends": True, "dpt": "1.001"},
+        str(_ga("1/2/4").raw): {"users": [kitchen], "sends": False, "dpt": "1.001"},
         str(_ga("1/2/5").raw): {
             "users": [
                 {
@@ -240,10 +245,12 @@ async def test_what_home_assistant_does_with_the_group_addresses(
                 }
             ],
             "sends": False,
+            "dpt": "1.001",
         },
         str(_ga("1/2/9").raw): {
             "users": [{"kind": "expose", "name": "sensor.sun state"}],
             "sends": True,
+            "dpt": "5.001",
         },
     }
 

@@ -44,6 +44,8 @@ class AreaLinks:
         areas = ar.async_get(self.hass).async_list_areas()
         return {
             "type": "areas",
+            # The home's name, for a building the editor makes from Home Assistant's floors.
+            "location_name": self.hass.config.location_name,
             "floors": [{"floor_id": f.floor_id, "name": f.name, "level": f.level} for f in floors],
             "areas": [{"area_id": a.id, "name": a.name, "floor_id": a.floor_id} for a in areas],
             "links": dict(self.links or {}),
@@ -51,7 +53,8 @@ class AreaLinks:
 
     async def async_apply(self, floors: Any, areas: Any) -> int:
         """Create, link or rename the floors and areas the editor sent; returns how many it
-        created, linked or renamed."""
+        created, linked or renamed. One with a ``floor_id`` or ``area_id`` that Home Assistant
+        has (the editor made its space from it) is linked to it as it is, not renamed."""
         # Both checked before anything changes.
         floor_entries, area_entries = _entries(floors), _entries(areas)
         links = await self.async_load()
@@ -61,6 +64,11 @@ class AreaLinks:
         for floor in floor_entries:
             key, name = str(floor["key"]), str(floor["name"])
             level = floor.get("level") if isinstance(floor.get("level"), int) else None
+            chosen = floor_registry.async_get_floor(str(floor.get("floor_id") or ""))
+            if chosen is not None:
+                links[key] = chosen.floor_id
+                changed += 1
+                continue
             linked = floor_registry.async_get_floor(links.get(key, ""))
             if linked is not None:
                 if linked.name != name:
@@ -77,6 +85,11 @@ class AreaLinks:
             floor_id = links.get(str(area.get("floor_key") or ""))
             if floor_id is not None and floor_registry.async_get_floor(floor_id) is None:
                 floor_id = None
+            chosen_area = area_registry.async_get_area(str(area.get("area_id") or ""))
+            if chosen_area is not None:
+                links[key] = chosen_area.id
+                changed += 1
+                continue
             linked_area = area_registry.async_get_area(links.get(key, ""))
             if linked_area is not None:
                 if linked_area.name != name:
