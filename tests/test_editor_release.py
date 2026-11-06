@@ -62,23 +62,25 @@ def test_the_bump_changes_only_the_versions() -> None:
     assert const == _CONST.replace(
         'EDITOR_VERSION: Final = "0.9.0"', 'EDITOR_VERSION: Final = "0.10.0"'
     )
+    # The repository's own files, bumped to a version they never have (on a release branch
+    # they already have that release's).
     manifest = (_ROOT / "custom_components" / "xknx_editor" / "manifest.json").read_text(
         encoding="utf-8"
     )
-    bumped = editor_release.bumped_manifest(manifest, "0.10.0")
-    assert json.loads(bumped) == {**json.loads(manifest), "version": "0.10.0"}
+    bumped = editor_release.bumped_manifest(manifest, "99.0.0")
+    assert json.loads(bumped) == {**json.loads(manifest), "version": "99.0.0"}
     # The layout stays: only the version line differs.
     differing = [
         (a, b) for a, b in zip(manifest.splitlines(), bumped.splitlines(), strict=True) if a != b
     ]
     assert differing == [
-        (f'  "version": "{json.loads(manifest)["version"]}"', '  "version": "0.10.0"')
+        (f'  "version": "{json.loads(manifest)["version"]}"', '  "version": "99.0.0"')
     ]
     bug_report = (_ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml").read_text(
         encoding="utf-8"
     )
-    bumped = editor_release.bumped_bug_report(bug_report, "0.10.0")
-    assert 'label: Integration Version\n      placeholder: "0.10.0"' in bumped
+    bumped = editor_release.bumped_bug_report(bug_report, "99.0.0")
+    assert 'label: Integration Version\n      placeholder: "99.0.0"' in bumped
     # The Home Assistant version's placeholder stays.
     assert bumped.count("placeholder:") == bug_report.count("placeholder:")
     assert 'placeholder: "2026.11.0"' in bumped
