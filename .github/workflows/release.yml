@@ -79,7 +79,7 @@ jobs:
           repository: XKNX/xknx-editor
           ref: ${{ steps.editor.outputs.tag }}
           path: editor
-      - uses: astral-sh/setup-uv@v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.3
       # The key-extraction helpers are built like in the editor's Docker image, with the .NET SDK.
       - uses: actions/setup-dotnet@v6
         with:
