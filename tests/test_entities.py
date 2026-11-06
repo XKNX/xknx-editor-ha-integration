@@ -175,6 +175,50 @@ async def test_an_entity_follows_its_function(hass: HomeAssistant) -> None:
         await links.async_delete("g:function:1")
 
 
+async def test_a_climate_entity_keeps_its_settings_from_home_assistant(
+    hass: HomeAssistant,
+) -> None:
+    knx = _KnxModule(hass)
+    hass.data["knx"] = knx
+    links = EntityLinks(hass)
+
+    def heating(setpoint: str) -> dict[str, Any]:
+        return {
+            "target_temperature": {
+                "ga_temperature_target": {"write": setpoint, "state": setpoint, "passive": []}
+            },
+            "ga_temperature_current": {"write": None, "state": "3/1/1", "passive": []},
+            "ga_valve": {"write": None, "state": "3/1/3", "passive": []},
+        }
+
+    candidate = {
+        "key": "g:function:5",
+        "platform": "climate",
+        "name": "Radiator",
+        "knx": heating("3/1/2"),
+        "area_id": None,
+    }
+    assert links.check([candidate]) == {"g:function:5": None}
+    created, errors = await links.async_create([candidate])
+    assert errors == {}
+    entity_id = created["g:function:5"]
+    stored = knx.config_store.stored[entity_id]["data"]["knx"]
+    # The KNX integration's defaults for what the function does not say.
+    assert stored["target_temperature"]["min_temp"] == 7
+    # Changed in Home Assistant: other limits, a passive address of the room temperature.
+    stored["target_temperature"]["min_temp"] = 15
+    stored["ga_temperature_current"]["passive"] = ["3/1/9"]
+
+    updated, errors = await links.async_update([{"key": "g:function:5", "knx": heating("3/2/2")}])
+    assert (updated, errors) == (["g:function:5"], {})
+    stored = knx.config_store.stored[entity_id]["data"]["knx"]
+    target = stored["target_temperature"]
+    assert target["ga_temperature_target"]["write"] == "3/2/2"
+    assert target["ga_temperature_target"]["state"] == "3/2/2"
+    assert target["min_temp"] == 15
+    assert stored["ga_temperature_current"]["passive"] == ["3/1/9"]
+
+
 async def test_the_time_server(hass: HomeAssistant) -> None:
     assert time_server(hass) is None
     knx = _KnxModule(hass)

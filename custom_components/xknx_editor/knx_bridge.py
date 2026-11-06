@@ -301,7 +301,7 @@ async def async_update_entity_knx(hass: HomeAssistant, entity_id: str, knx_confi
 
     data = current["data"]
     # Its own entity part (name, device, category) stays; the group addresses are replaced.
-    knx_new = {**(data.get("knx") or {}), **knx_config}
+    knx_new = _with_addresses(data.get("knx") or {}, knx_config)
     try:
         validated = validate_entity_data(
             {
@@ -312,6 +312,22 @@ async def async_update_entity_knx(hass: HomeAssistant, entity_id: str, knx_confi
     except EntityStoreValidationException as error:
         raise KnxError(_validation_text(error.validation_error)) from error
     await config_store.update_entity(current["platform"], entity_id, validated["data"])
+
+
+def _with_addresses(stored: dict[str, Any], addresses: dict[str, Any]) -> dict[str, Any]:
+    """``stored`` (an entity's ``knx`` configuration) with the group addresses it writes to and
+    reads its state from of ``addresses``, also in a part of it (a climate entity's target
+    temperature); its passive addresses and its other settings (limits, steps) stay."""
+    result = dict(stored)
+    for key, value in addresses.items():
+        have = stored.get(key)
+        if not isinstance(value, dict) or not isinstance(have, dict):
+            result[key] = value
+        elif "write" in value or "state" in value:
+            result[key] = {**have, "write": value.get("write"), "state": value.get("state")}
+        else:
+            result[key] = _with_addresses(have, value)
+    return result
 
 
 async def async_delete_entity(hass: HomeAssistant, entity_id: str) -> None:
