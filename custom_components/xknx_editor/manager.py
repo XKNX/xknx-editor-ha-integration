@@ -138,6 +138,7 @@ class EditorManager:
             mcp_token=secrets.token_urlsafe(32),
             mcp_url=self._mcp_url(),
             environment=await asyncio.to_thread(self.dotnet.environment),
+            language=self.hass.config.language,
         )
         self.run += 1
         await self.process.async_start(self.client)

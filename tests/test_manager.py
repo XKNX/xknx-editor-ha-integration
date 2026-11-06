@@ -196,7 +196,7 @@ async def test_start_installs_and_starts_the_editor(hass: HomeAssistant, tmp_pat
     async def dotnet(session: object, text: str) -> None:
         steps.append(manager.status)
 
-    await hass.config.async_update(external_url="https://ha.example")
+    await hass.config.async_update(external_url="https://ha.example", language="de")
     with (
         patch.object(manager.environment, "async_requirements", requirements),
         patch.object(manager.environment, "async_ensure", ensure),
@@ -217,6 +217,8 @@ async def test_start_installs_and_starts_the_editor(hass: HomeAssistant, tmp_pat
     assert options["cache"] == manager.environment.root / "cache"
     assert options["mcp_url"] == "https://ha.example/api/xknx_editor/mcp"
     assert options["environment"] == {"DOTNET_ROOT": "/d"}
+    # Home Assistant's language, the editor's until one is chosen in it.
+    assert options["language"] == "de"
     # A token of its own for every run.
     token = options["mcp_token"]
     assert isinstance(token, str) and len(token) >= 32
