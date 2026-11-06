@@ -25,6 +25,7 @@ from aiohttp import ClientTimeout, WSMsgType, hdrs
 from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import HomeAssistant
 
+from .areas import AreaLinks
 from .const import EDITOR_COOKIE
 from .knx_bridge import (
     KnxError,
@@ -64,6 +65,8 @@ class EditorLink:
         self.version = version
         # Whether the link is open now (diagnostics).
         self.connected = False
+        # The floors and areas the editor's spaces became.
+        self.areas = AreaLinks(hass)
 
     def knx_state(self) -> dict[str, Any]:
         return {
@@ -149,9 +152,11 @@ class EditorLink:
         _LOGGER.debug("Linked to the editor")
         reported: dict[str, Any] | None = None
         used: dict[str, Any] | None = None
+        places: dict[str, Any] | None = None
+        await self.areas.async_load()
 
         def report() -> None:
-            nonlocal reported, used
+            nonlocal reported, used, places
             state = self.knx_state()
             if state != reported:
                 reported = state
@@ -160,6 +165,10 @@ class EditorLink:
             if usage != used:
                 used = usage
                 outbox.put_nowait({"type": "usage", "group_addresses": usage})
+            snapshot = self.areas.snapshot()
+            if snapshot != places:
+                places = snapshot
+                outbox.put_nowait(snapshot)
 
         report()
         outbox.put_nowait({"type": "values", "telegrams": latest_telegrams(self.hass)})
@@ -206,6 +215,20 @@ class EditorLink:
             # The new project first, then the answer (the editor links the project by it).
             report()
             outbox.put_nowait({"type": "result", "id": message.get("id"), "error": error})
+        elif kind == "apply_areas":
+            result: dict[str, Any] = {"type": "result", "id": message.get("id"), "error": None}
+            try:
+                result["changed"] = await self.areas.async_apply(
+                    message.get("floors"), message.get("areas")
+                )
+            except ValueError as failure:
+                result["error"] = str(failure)
+            except Exception as failure:  # the editor shows why
+                _LOGGER.exception("The floors and areas could not be applied")
+                result["error"] = str(failure) or type(failure).__name__
+            # The new floors and areas first, then the answer.
+            report()
+            outbox.put_nowait(result)
         elif kind == "telegram_history":
             answer: dict[str, Any] = {"type": "result", "id": message.get("id"), "error": None}
             try:

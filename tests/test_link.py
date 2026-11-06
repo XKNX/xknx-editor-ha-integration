@@ -286,3 +286,29 @@ async def test_the_recorded_telegrams_are_given(
     assert result["error"] == "the KNX integration's telegram history is not ready"
     await editor.socket.send_json({"type": "telegram_history", "id": 6, "hours": "x"})
     assert (await editor.next("result"))["error"]
+
+
+async def test_floors_and_areas_for_the_editor(
+    hass: HomeAssistant, editor: _Editor, linked: tuple[EditorLink, _Manager]
+) -> None:
+    first = await editor.next("areas")
+    assert first == {"type": "areas", "floors": [], "areas": [], "links": {}}
+    assert editor.socket is not None
+    await editor.socket.send_json(
+        {
+            "type": "apply_areas",
+            "id": 9,
+            "floors": [{"key": "g:2", "name": "Ground Floor", "level": 0}],
+            "areas": [{"key": "g:3", "name": "Kitchen", "floor_key": "g:2"}],
+        }
+    )
+    # The new floors and areas first, then the answer.
+    snapshot = await editor.next("areas")
+    assert [f["name"] for f in snapshot["floors"]] == ["Ground Floor"]
+    assert [a["name"] for a in snapshot["areas"]] == ["Kitchen"]
+    assert set(snapshot["links"]) == {"g:2", "g:3"}
+    assert await editor.next("result") == {"type": "result", "id": 9, "error": None, "changed": 2}
+
+    await editor.socket.send_json({"type": "apply_areas", "id": 10, "floors": "x", "areas": []})
+    result = await editor.next("result")
+    assert result["id"] == 10 and result["error"]
