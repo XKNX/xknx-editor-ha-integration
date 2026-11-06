@@ -8,11 +8,9 @@ This integration runs [XKNX Editor](https://github.com/XKNX/xknx-editor), the KN
 
 ## Installation
 
-1. Open **Settings** > **Marketplace** in Home Assistant, search for **XKNX Editor** and install it.
+1. Open **Settings** > **Marketplace** in Home Assistant, search for **XKNX Editor** and install it. With Home Assistant 2026.10, which has no Marketplace yet, install it from [HACS](https://hacs.xyz) instead.
 2. Restart Home Assistant.
 3. Add the integration under **Settings** > **Devices & services** > **Add integration** > **XKNX Editor**.
-
-Until XKNX Editor is listed in the Marketplace, add it from its GitHub link first: in **Settings** > **Marketplace**, choose **Custom repositories** in the menu at the top right and add `https://github.com/XKNX/xknx-editor-ha-integration` with the type **Integration** (this asks you to connect GitHub first). With Home Assistant 2026.10, which has no Marketplace yet, do the same in [HACS](https://hacs.xyz), also with **Custom repositories** in its menu at the top right.
 
 On its first start, the integration installs the editor into an environment of its own. That takes a few minutes and needs internet access. Until it's done, the **XKNX Editor** panel in the sidebar shows the progress.
 
