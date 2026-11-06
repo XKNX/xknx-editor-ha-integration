@@ -1,9 +1,6 @@
 # Home Assistant's test fixtures of the release the tests run against (they bring Home Assistant
 # itself), and the frontend package that release's frontend integration requires.
-# Until Home Assistant 2026.11 (the first release with pytest-homeassistant on PyPI) is out:
-# Home Assistant and its test fixtures from the dev branch.
-homeassistant @ git+https://github.com/home-assistant/core@dev
-pytest-homeassistant @ git+https://github.com/home-assistant/core@dev#subdirectory=packages/pytest-homeassistant
-home-assistant-frontend
+pytest-homeassistant==2026.11.0
+home-assistant-frontend==20261028.4
 # Coverage for Codecov (pytest --cov)
 pytest-cov

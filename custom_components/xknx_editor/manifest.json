@@ -1,8 +1,10 @@
 {
   "domain": "xknx_editor",
   "name": "XKNX Editor",
+  "categories": ["hubs_protocols.building_automation"],
   "codeowners": ["@ab-tools"],
   "config_flow": true,
+  "connectivity": ["knx"],
   "dependencies": ["frontend", "http", "panel_custom", "websocket_api"],
   "documentation": "https://github.com/XKNX/xknx-editor-ha-integration",
   "integration_type": "service",

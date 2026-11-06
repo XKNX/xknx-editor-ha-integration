@@ -36,6 +36,7 @@ This onboards Home Assistant (user `dev`, password `dev-password`) and adds XKNX
 
 - **Panel:** `uv run --with playwright scripts/dev/check_panel.py .dev/shots` takes screenshots of the panel at desktop and phone size.
 - **MCP:** `python scripts/dev/check_mcp.py` talks MCP to the editor through Home Assistant (initialize, list the tools, call one).
+- **Behind a reverse proxy:** from Home Assistant 2026.11 on, its HTTP settings are kept by Home Assistant itself (YAML is only taken over once). Trust a local proxy with the websocket commands `http/config/configure` (`{"server_port": 8123, "use_x_forwarded_for": true, "trusted_proxies": ["127.0.0.1", "::1"]}`, restarts Home Assistant) and then `http/config/promote`; otherwise it goes back to the previous settings after five minutes. Requests with `X-Forwarded-For` then reach the panel like through a reverse proxy.
 - **Restart:** `wsl -d HomeAssistantDev -u root -- sh scripts/dev/stop_ha.sh`, then `run_ha.sh` again, loads changed integration code.
 - **Tests and hassfest** on the image's Home Assistant (WSL): `setup_tests.sh` once, then `run_tests.sh` and `hassfest.sh`:
 
