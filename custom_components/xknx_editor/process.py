@@ -7,7 +7,9 @@ import contextlib
 import logging
 import os
 import re
+import signal
 import socket
+import time
 from collections import deque
 from pathlib import Path
 
@@ -30,6 +32,8 @@ _FOREIGN_SETTINGS = (
 )
 # The editor's log colors (terminal escape sequences), left out of Home Assistant's log.
 _COLORS = re.compile(r"\x1b\[[0-9;]*m")
+# The editor's process number, in the data folder.
+_PID_FILE = "editor.pid"
 
 
 class StartError(Exception):
@@ -41,6 +45,15 @@ def free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
         probe.bind((HOST, 0))
         return int(probe.getsockname()[1])
+
+
+def is_editor(pid: int) -> bool:
+    """Whether process ``pid`` runs the editor, from its command line (a process that ended and
+    was not collected yet has none)."""
+    try:
+        return b"editor_gui.main" in Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return False
 
 
 class EditorProcess:
@@ -112,10 +125,30 @@ class EditorProcess:
             env["PATH"] = os.pathsep.join(filter(None, (dotnet, env.get("PATH"))))
         return env
 
+    def _end_leftover(self) -> None:
+        """End the editor an earlier run of Home Assistant left behind (killed, or crashed): its
+        process lives on in the container, which starts Home Assistant again."""
+        try:
+            pid = int((self._data / _PID_FILE).read_text(encoding="ascii"))
+        except OSError, ValueError:
+            return
+        if not is_editor(pid):
+            return
+        _LOGGER.warning("Ending the XKNX Editor an earlier run left behind (process %s)", pid)
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(pid, signal.SIGTERM)
+        deadline = time.monotonic() + _STOP_TIMEOUT
+        while is_editor(pid) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        if is_editor(pid):
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGKILL)
+
     async def async_start(self, session: ClientSession) -> None:
         """Start the editor and wait until its web UI answers."""
         for folder in (self._data, self._files, self._cache):
             await asyncio.to_thread(folder.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(self._end_leftover)
         self.port = free_port()
         self.mcp_port = free_port()
         self.output.clear()
@@ -132,6 +165,8 @@ class EditorProcess:
             # Inside Home Assistant: a new version is only announced (Home Assistant updates the
             # editor with the integration).
             "--home-assistant",
+            # The only editor here: it does not offer switching to others first.
+            "--new-instance",
             # The MCP server, reachable through Home Assistant only (proxy.McpProxyView).
             f"--mcp={HOST}:{self.mcp_port}",
             *mcp_url,
@@ -140,6 +175,9 @@ class EditorProcess:
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+        )
+        await asyncio.to_thread(
+            (self._data / _PID_FILE).write_text, str(self._process.pid), encoding="ascii"
         )
         self._reader = asyncio.create_task(self._read_output(self._process))
         try:

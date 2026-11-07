@@ -66,7 +66,16 @@ class EditorManager:
         _LOGGER.info("XKNX Editor: %s", step)
 
     async def async_run(self) -> None:
-        """Install, start and watch the editor until async_stop."""
+        """Install, start and watch the editor until async_stop, or until Home Assistant stops:
+        it cancels this task without unloading the entry, and the editor's process would outlive
+        it otherwise (in the container, which starts Home Assistant again, too)."""
+        try:
+            await self._async_watch()
+        finally:
+            if self.process is not None:
+                await self.process.async_stop()
+
+    async def _async_watch(self) -> None:
         failures = 0
         while not self._stopping:
             started = asyncio.get_running_loop().time()

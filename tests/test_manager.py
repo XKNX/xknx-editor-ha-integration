@@ -1,9 +1,11 @@
 """Keeping the editor running: status, and the waits before the next start."""
 
+import asyncio
 from collections import deque
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 
@@ -99,6 +101,35 @@ async def test_stop_ends_the_watch(hass: HomeAssistant) -> None:
         await manager.async_run()
     assert stopped
     assert manager.client.closed
+
+
+async def test_cancelling_the_watch_stops_the_editor(hass: HomeAssistant) -> None:
+    """Home Assistant stopping cancels the watch without unloading the entry."""
+    manager = EditorManager(hass, password="x", requirements="r.txt")
+    watched = asyncio.Event()
+    stopped = False
+
+    class RunningProcess(EndingProcess):
+        async def async_wait(self) -> int:
+            watched.set()
+            await asyncio.Event().wait()
+            return 0
+
+        async def async_stop(self) -> None:
+            nonlocal stopped
+            stopped = True
+
+    async def start() -> None:
+        manager.process = RunningProcess(0)  # type: ignore[assignment]
+
+    with patch.object(manager, "_async_start", start):
+        task = asyncio.create_task(manager.async_run())
+        await watched.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    assert stopped
+    await manager.client.close()
 
 
 async def test_repair_issue_while_not_running(hass: HomeAssistant) -> None:
