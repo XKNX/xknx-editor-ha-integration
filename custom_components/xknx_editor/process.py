@@ -184,6 +184,8 @@ class EditorProcess:
             async with asyncio.timeout(_START_TIMEOUT):
                 while not await self._answers(session):
                     if not self.running:
+                        # Its last lines tell why: read them to the end first.
+                        await self._reader
                         raise StartError(self._failure("The editor ended"))
                     await asyncio.sleep(0.5)
         except TimeoutError:
