@@ -267,4 +267,9 @@ class XknxEditorPanel extends HTMLElement {
   }
 }
 
-customElements.define("xknx-editor-panel", XknxEditorPanel);
+// Home Assistant loads the script again when its URL changed (a new version, after a restart):
+// the element of the version loaded first stays until the page is loaded again, as a name can
+// be defined once only.
+if (!customElements.get("xknx-editor-panel")) {
+  customElements.define("xknx-editor-panel", XknxEditorPanel);
+}
