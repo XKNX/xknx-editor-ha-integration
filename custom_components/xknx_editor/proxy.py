@@ -75,6 +75,8 @@ _LOGIN_TIMEOUT = ClientTimeout(total=30)
 @dataclass
 class _Session:
     expires: float
+    # The browser tab it belongs to (with its user), when the panel names one.
+    tab: str | None = None
     # The editor's session for this one, and the editor run it belongs to.
     editor_cookie: str | None = None
     editor_run: int = -1
@@ -85,11 +87,16 @@ class Sessions:
 
     def __init__(self) -> None:
         self._sessions: dict[str, _Session] = {}
+        # The editor's session of each browser tab (see create), with the editor run it belongs
+        # to: a tab's new panel session stays the same browser for the editor, so it keeps control
+        # of the editor instead of watching its own earlier session.
+        self.editor_sessions: dict[str, tuple[int, str]] = {}
 
-    def create(self) -> str:
+    def create(self, tab: str | None = None) -> str:
+        """A new session; ``tab`` names the browser tab (and its user) it is for."""
         self._expire()
         token = secrets.token_urlsafe(32)
-        self._sessions[token] = _Session(time.monotonic() + SESSION_TIMEOUT)
+        self._sessions[token] = _Session(time.monotonic() + SESSION_TIMEOUT, tab=tab)
         return token
 
     def validate(self, token: str) -> bool:
@@ -197,10 +204,16 @@ class McpProxyView(HomeAssistantView):
 
 
 async def _editor_cookie(manager: EditorManager, session: _Session) -> str:
-    """The editor's session for ``session``, signed in once per editor run."""
+    """The editor's session for ``session``, signed in once per editor run and browser tab."""
     run = manager.run
     if session.editor_cookie is not None and session.editor_run == run:
         return session.editor_cookie
+    tabs = manager.sessions.editor_sessions
+    if session.tab is not None:
+        known = tabs.get(session.tab)
+        if known is not None and known[0] == run:
+            session.editor_cookie, session.editor_run = known[1], run
+            return known[1]
     process = manager.process
     assert process is not None
     async with manager.client.post(
@@ -214,6 +227,11 @@ async def _editor_cookie(manager: EditorManager, session: _Session) -> str:
             raise aiohttp.ClientError("the editor refused the sign-in")
         session.editor_cookie = morsel.value
         session.editor_run = run
+        if session.tab is not None:
+            # Of earlier editor runs only the current one counts.
+            for tab in [t for t, (r, _cookie) in tabs.items() if r != run]:
+                del tabs[tab]
+            tabs[session.tab] = (run, morsel.value)
         return morsel.value
 
 
@@ -346,11 +364,24 @@ _SIGNED_OUT_PAGE = """<!doctype html>
 body { font-family: system-ui, sans-serif; margin: 2em; color: #212121; background: #fafafa; }
 @media (prefers-color-scheme: dark) { body { color: #e1e1e1; background: #111; } }
 </style></head>
-<body><h2 id="text">Open XKNX Editor from the sidebar.</h2>
+<body><h2 id="xknx-editor-signed-out">Open XKNX Editor from the sidebar.</h2>
 <script>
 if (window.parent !== window) {
-  document.getElementById("text").textContent = "Signing in again…";
-  window.parent.postMessage({ type: "xknx_editor/signed_out" }, location.origin);
+  // Asked with every load; the page loads itself again until the panel's new session works,
+  // which also loads the editor (panel.js resets the count then).
+  const text = document.getElementById("xknx-editor-signed-out");
+  let tries = 0;
+  try {
+    tries = Number(sessionStorage.getItem("xknx_editor_signin_tries")) || 0;
+    sessionStorage.setItem("xknx_editor_signin_tries", String(tries + 1));
+  } catch (err) {}
+  if (tries < 10) {
+    text.textContent = "Signing in again…";
+    window.parent.postMessage({ type: "xknx_editor/signed_out" }, location.origin);
+    setTimeout(() => location.reload(), 3000);
+  } else {
+    text.textContent = "Could not sign in again. Reload the page to open XKNX Editor.";
+  }
 }
 </script></body></html>
 """
