@@ -7,6 +7,7 @@ through the proxy in proxy.py.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -79,10 +80,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: XknxEditorConfigEntry) -
         webcomponent_name=PANEL_ELEMENT,
         sidebar_title=PANEL_TITLE,
         sidebar_icon=PANEL_ICON,
-        module_url=f"{STATIC_URL}/panel.js?v={EDITOR_VERSION}",
+        module_url=f"{STATIC_URL}/panel.js?v={await hass.async_add_executor_job(_panel_version)}",
         require_admin=not manager.allow_non_admins,
     )
     return True
+
+
+def _panel_version() -> str:
+    """The panel script's version for its URL: from its content, so a browser (or Home Assistant's
+    service worker) never keeps an older script once it changed, also between releases."""
+    script = (Path(__file__).parent / "frontend" / "panel.js").read_bytes()
+    return hashlib.sha256(script).hexdigest()[:12]
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: XknxEditorConfigEntry) -> bool:
@@ -110,16 +118,23 @@ def _allowed(
     return True
 
 
-@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/session"})
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/session",
+        vol.Optional("tab"): vol.All(str, vol.Length(min=1, max=64)),
+    }
+)
 @callback
 def websocket_session(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """A new session for the panel."""
+    """A new session for the panel, for its browser tab (``tab``) when it names one."""
     manager = _manager(hass)
     if _allowed(connection, msg, manager):
         assert manager is not None
-        connection.send_result(msg["id"], {"session": manager.sessions.create()})
+        tab = msg.get("tab")
+        owner = f"{connection.user.id}:{tab}" if tab else None
+        connection.send_result(msg["id"], {"session": manager.sessions.create(owner)})
 
 
 @websocket_api.websocket_command(

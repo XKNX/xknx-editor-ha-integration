@@ -1,8 +1,10 @@
 """The way from Home Assistant to the editor: sessions, sign-in, HTTP and websocket."""
 
 import asyncio
+import hashlib
 from collections.abc import AsyncGenerator, Generator
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -165,9 +167,11 @@ async def manager(
     await manager.client.close()
 
 
-async def session_for(hass_ws_client: WebSocketGenerator, hass: HomeAssistant) -> str:
+async def session_for(
+    hass_ws_client: WebSocketGenerator, hass: HomeAssistant, tab: str | None = None
+) -> str:
     client = await hass_ws_client(hass)
-    await client.send_json_auto_id({"type": f"{DOMAIN}/session"})
+    await client.send_json_auto_id({"type": f"{DOMAIN}/session", **({"tab": tab} if tab else {})})
     response = await client.receive_json()
     assert response["success"]
     return response["result"]["session"]
@@ -190,6 +194,9 @@ async def test_without_session_nothing_reaches_the_editor(
     page = await response.text()
     assert response.headers["Cache-Control"] == "no-store"
     assert 'postMessage({ type: "xknx_editor/signed_out" }, location.origin)' in page
+    # It asks again with every load, loading itself again until the session works.
+    assert "location.reload()" in page
+    assert 'id="xknx-editor-signed-out"' in page
     assert "Open XKNX Editor from the sidebar." in page
 
 
@@ -239,6 +246,34 @@ async def test_page_through_the_proxy(
     manager.run += 1
     await client.get(UI_URL, cookies={SESSION_COOKIE: session})
     assert editor.logins == 3
+
+
+async def test_a_tab_stays_the_same_browser_for_the_editor(
+    hass: HomeAssistant,
+    manager: EditorManager,
+    editor: FakeEditor,
+    hass_client_no_auth: ClientSessionGenerator,
+    hass_ws_client: WebSocketGenerator,
+) -> None:
+    """A browser tab's new session (after the old one ran out) uses the editor's session of that
+    tab again, so the editor gives it back control instead of letting it watch."""
+    client = await hass_client_no_auth()
+    first = await session_for(hass_ws_client, hass, tab="tab-1")
+    await client.get(UI_URL, cookies={SESSION_COOKIE: first})
+    renewed = await session_for(hass_ws_client, hass, tab="tab-1")
+    await client.get(UI_URL, cookies={SESSION_COOKIE: renewed})
+    assert editor.logins == 1
+    assert editor.seen[-1]["Cookie"] == f"{EDITOR_COOKIE}=session-1"
+    # Another tab is another browser.
+    other = await session_for(hass_ws_client, hass, tab="tab-2")
+    await client.get(UI_URL, cookies={SESSION_COOKIE: other})
+    assert editor.logins == 2
+    # A new editor run signs the tab in again, once.
+    manager.run += 1
+    await client.get(UI_URL, cookies={SESSION_COOKIE: renewed})
+    await client.get(UI_URL, cookies={SESSION_COOKIE: first})
+    assert editor.logins == 3
+    assert list(manager.sessions.editor_sessions.values()) == [(manager.run, "session-3")]
 
 
 @pytest.mark.parametrize(
@@ -378,6 +413,11 @@ def test_sessions_end_without_renewal() -> None:
 async def test_panel_while_loaded(hass: HomeAssistant, manager: EditorManager) -> None:
     panels = hass.data["frontend_panels"]
     assert panels["xknx-editor"].require_admin
+    # The script's URL changes with its content, so no browser keeps an older one.
+    script = Path(__file__).parents[1] / "custom_components/xknx_editor/frontend/panel.js"
+    version = hashlib.sha256(script.read_bytes()).hexdigest()[:12]
+    module_url = panels["xknx-editor"].config["_panel_custom"]["module_url"]
+    assert module_url.endswith(f"/panel.js?v={version}")
     entry = hass.config_entries.async_entries(DOMAIN)[0]
     with patch.object(EditorManager, "async_stop") as stop:
         assert await hass.config_entries.async_unload(entry.entry_id)
