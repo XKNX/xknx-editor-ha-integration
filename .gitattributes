@@ -1,2 +1,4 @@
 * text=auto eol=lf
 *.png binary
+# Keyrings are signed byte for byte.
+*.knxkeys binary

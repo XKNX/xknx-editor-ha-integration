@@ -65,6 +65,7 @@ def editor(tmp_path: Path) -> EditorProcess:
         mcp_token="mcp-secret",
         mcp_url="https://ha.example/api/xknx_editor/mcp",
         environment={"DOTNET_ROOT": "/opt/dotnet", "XKNX_KEYEXTRACT_DIR": "/opt/keyextract"},
+        language="pt-BR",
     )
 
 
@@ -89,6 +90,8 @@ async def test_start_and_stop(editor: EditorProcess, tmp_path: Path, monkeypatch
     assert editor.mcp_endpoint == f"http://127.0.0.1:{editor.mcp_port}/mcp"
     assert "--mcp-url=https://ha.example/api/xknx_editor/mcp" in seen["argv"]
     assert seen["mcp_token"] == "mcp-secret"
+    # Home Assistant's language, for the editor's while none is chosen in it.
+    assert "--language=pt-BR" in seen["argv"]
     # The .NET runtime first on the path, the helpers named.
     assert seen["path"].split(os.pathsep)[0] == "/opt/dotnet"
     assert seen["helpers"] == "/opt/keyextract"

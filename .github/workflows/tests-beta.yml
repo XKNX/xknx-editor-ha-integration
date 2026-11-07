@@ -1,0 +1,32 @@
+name: Tests (Home Assistant beta)
+
+# The integration uses parts of Home Assistant's KNX integration that are not a public API
+# (custom_components/xknx_editor/knx_bridge.py). These tests run against the newest Home Assistant
+# release, a beta while there is one, so a change there shows here before that release reaches
+# users. The tests in tests.yml stay on the stable release of requirements_test.txt.
+
+on:
+  schedule:
+    # Every morning: a new beta comes out on the last Wednesday of the month, and on the days after.
+    - cron: "17 5 * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+      - run: uv venv --python 3.14
+      # The newest release, a beta too (the pre-release in the version lets uv take one).
+      - run: uv pip install "pytest-homeassistant>=2026.11.0b0"
+      # The packages of the KNX and frontend integrations of that release.
+      - run: .venv/bin/python scripts/ha_requirements.py knx frontend > ha-requirements.txt
+      - run: uv pip install -r ha-requirements.txt
+      - run: .venv/bin/python -c "import homeassistant.const as c; print('Home Assistant', c.__version__)"
+      - run: .venv/bin/pytest

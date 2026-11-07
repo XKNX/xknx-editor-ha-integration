@@ -77,6 +77,7 @@ class EditorProcess:
         mcp_token: str,
         mcp_url: str | None = None,
         environment: dict[str, str] | None = None,
+        language: str | None = None,
     ) -> None:
         self._python = python
         self._data = data
@@ -87,6 +88,9 @@ class EditorProcess:
         self._mcp_url = mcp_url
         # More settings for the editor: the .NET runtime and its helpers (dotnet.py).
         self._extra_environment = environment or {}
+        # Home Assistant's language: the editor's (and its product language) until one is chosen
+        # in the editor's settings.
+        self._language = language
         self._process: asyncio.subprocess.Process | None = None
         self._reader: asyncio.Task[None] | None = None
         # The last lines the editor wrote, for the message when it fails.
@@ -153,6 +157,7 @@ class EditorProcess:
         self.mcp_port = free_port()
         self.output.clear()
         mcp_url = [f"--mcp-url={self._mcp_url}"] if self._mcp_url else []
+        language = [f"--language={self._language}"] if self._language else []
         self._process = await asyncio.create_subprocess_exec(
             str(self._python),
             "-m",
@@ -170,6 +175,7 @@ class EditorProcess:
             # The MCP server, reachable through Home Assistant only (proxy.McpProxyView).
             f"--mcp={HOST}:{self.mcp_port}",
             *mcp_url,
+            *language,
             env=self._environment(),
             cwd=str(self._data),
             stdin=asyncio.subprocess.DEVNULL,
