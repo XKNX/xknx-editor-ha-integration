@@ -185,6 +185,27 @@ async def test_without_session_nothing_reaches_the_editor(
     response = await client.get(UI_URL, cookies={SESSION_COOKIE: "made-up"})
     assert response.status == 401
     assert editor.seen == []
+    # Inside the panel, the page asks it for a new session (panel.js); opened by itself, it
+    # points to the sidebar.
+    page = await response.text()
+    assert response.headers["Cache-Control"] == "no-store"
+    assert 'postMessage({ type: "xknx_editor/signed_out" }, location.origin)' in page
+    assert "Open XKNX Editor from the sidebar." in page
+
+
+async def test_page_while_the_integration_is_not_set_up(
+    hass: HomeAssistant, manager: EditorManager, hass_client_no_auth: ClientSessionGenerator
+) -> None:
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    with patch.object(EditorManager, "async_stop"):
+        assert await hass.config_entries.async_unload(entry.entry_id)
+    client = await hass_client_no_auth()
+    response = await client.get(UI_URL)
+    # A page that loads itself again until the integration runs.
+    assert response.status == 503
+    page = await response.text()
+    assert "Waiting for Home Assistant to set up XKNX Editor" in page
+    assert 'http-equiv="refresh" content="3"' in page
 
 
 async def test_page_through_the_proxy(
