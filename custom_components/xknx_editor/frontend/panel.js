@@ -6,6 +6,10 @@ const COOKIE = "xknx_editor_session";
 const COOKIE_PATH = "/api/xknx_editor/";
 const UI_URL = "/api/xknx_editor/ui/";
 const RENEW_MS = 60 * 1000;
+// The editor's page reports a request without a live session (proxy.py); the panel then loads it
+// again with a renewed session, but not more often than this (without cookies it never helps).
+const SIGNED_OUT = "xknx_editor/signed_out";
+const RELOAD_GAP_MS = 10 * 1000;
 // The session of this browser tab, kept while it is live: Home Assistant may create the panel
 // more than once, and the editor gives control back to a returning session (a reload) only.
 const STORAGE_KEY = "xknx_editor_session";
@@ -57,6 +61,27 @@ class XknxEditorPanel extends HTMLElement {
     this._session = null;
     this._timer = null;
     this._started = false;
+    this._reloaded = 0;
+    this._reloadTimer = null;
+    this._connection = null;
+    this._onMessage = (event) => {
+      const frame = this.shadowRoot.querySelector("iframe");
+      if (
+        frame &&
+        event.source === frame.contentWindow &&
+        event.origin === location.origin &&
+        event.data &&
+        event.data.type === SIGNED_OUT
+      ) {
+        this._renew(true);
+      }
+    };
+    // Timers of a hidden tab are slowed down or stopped, so its session may have run out.
+    this._onVisible = () => {
+      if (document.visibilityState === "visible") this._renew();
+    };
+    // Home Assistant is back after a restart, without the sessions it had.
+    this._onReady = () => this._renew();
     this.attachShadow({ mode: "open" });
   }
 
@@ -79,7 +104,13 @@ class XknxEditorPanel extends HTMLElement {
   disconnectedCallback() {
     clearInterval(this._timer);
     this._timer = null;
+    clearTimeout(this._reloadTimer);
+    this._reloadTimer = null;
     this._started = false;
+    window.removeEventListener("message", this._onMessage);
+    document.removeEventListener("visibilitychange", this._onVisible);
+    if (this._connection) this._connection.removeEventListener("ready", this._onReady);
+    this._connection = null;
   }
 
   async _start() {
@@ -92,6 +123,10 @@ class XknxEditorPanel extends HTMLElement {
     }
     this._render();
     this._timer = setInterval(() => this._renew(), RENEW_MS);
+    window.addEventListener("message", this._onMessage);
+    document.addEventListener("visibilitychange", this._onVisible);
+    this._connection = this._hass.connection || null;
+    if (this._connection) this._connection.addEventListener("ready", this._onReady);
   }
 
   _useSession(session) {
@@ -100,20 +135,41 @@ class XknxEditorPanel extends HTMLElement {
     document.cookie = `${COOKIE}=${this._session};path=${COOKIE_PATH};SameSite=Strict${secure}`;
   }
 
-  async _renew() {
+  // Keeps the session live, takes a new one when it ran out, and then loads the editor again;
+  // `signedOut`: the editor's page got no answer for want of a session, so it is loaded again
+  // either way (its cookie may be gone while the session is still live).
+  async _renew(signedOut = false) {
+    if (!this._started || !this._session) return;
     try {
       const result = await this._hass.callWS({
         type: "xknx_editor/session/validate",
         session: this._session,
       });
-      if (!result.valid) {
+      if (result.valid) {
+        if (signedOut) this._useSession(this._session);
+      } else {
         this._useSession(await tabSession(this._hass, true));
-        const frame = this.shadowRoot.querySelector("iframe");
-        if (frame) frame.src = UI_URL;
       }
+      if (!result.valid || signedOut) this._reload();
     } catch (err) {
       // Home Assistant restarts: the next round asks again.
     }
+  }
+
+  // Loads the editor again, at the earliest RELOAD_GAP_MS after the last time.
+  _reload() {
+    const frame = this.shadowRoot.querySelector("iframe");
+    if (!frame || this._reloadTimer) return;
+    const wait = this._reloaded + RELOAD_GAP_MS - Date.now();
+    if (wait > 0) {
+      this._reloadTimer = setTimeout(() => {
+        this._reloadTimer = null;
+        this._reload();
+      }, wait);
+      return;
+    }
+    this._reloaded = Date.now();
+    frame.src = UI_URL;
   }
 
   _showError(err) {

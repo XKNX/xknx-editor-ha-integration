@@ -127,9 +127,12 @@ class EditorProxyView(HomeAssistantView):
 
     async def _handle(self, request: web.Request, path: str) -> web.StreamResponse:
         manager = self._managers()
-        session = manager.sessions.get(request.cookies.get(SESSION_COOKIE)) if manager else None
-        if manager is None or session is None:
-            return web.Response(status=401, text="Open XKNX Editor from the sidebar.")
+        if manager is None:
+            # Home Assistant has not set up the integration (yet), e.g. while it starts.
+            return _status_page(_NOT_SET_UP, "")
+        session = manager.sessions.get(request.cookies.get(SESSION_COOKIE))
+        if session is None:
+            return _signed_out_page()
         process = manager.process
         if process is None or not process.running:
             return _status_page(manager.status, manager.detail)
@@ -329,6 +332,37 @@ pre {{ white-space: pre-wrap; font-size: 0.85em; }}
 </style></head>
 <body><h2>{title}</h2><pre>{detail}</pre></body></html>
 """
+
+
+_NOT_SET_UP = "Waiting for Home Assistant to set up XKNX Editor"
+
+# A request without a live session, e.g. after Home Assistant restarted (sessions live in memory)
+# or the editor's page reloaded itself while the panel's session ran out: inside the panel the
+# page asks it for a new session at once (panel.js), which then loads the editor again.
+_SIGNED_OUT_PAGE = """<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>XKNX Editor</title>
+<style>
+body { font-family: system-ui, sans-serif; margin: 2em; color: #212121; background: #fafafa; }
+@media (prefers-color-scheme: dark) { body { color: #e1e1e1; background: #111; } }
+</style></head>
+<body><h2 id="text">Open XKNX Editor from the sidebar.</h2>
+<script>
+if (window.parent !== window) {
+  document.getElementById("text").textContent = "Signing in again…";
+  window.parent.postMessage({ type: "xknx_editor/signed_out" }, location.origin);
+}
+</script></body></html>
+"""
+
+
+def _signed_out_page() -> web.Response:
+    return web.Response(
+        status=401,
+        content_type="text/html",
+        headers={hdrs.CACHE_CONTROL: "no-store"},
+        text=_SIGNED_OUT_PAGE,
+    )
 
 
 def _status_page(status: str, detail: str) -> web.Response:
