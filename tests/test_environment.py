@@ -30,6 +30,12 @@ class FakeUv:
             assert "--no-build" in args
 
     requirements = ""
+    # What the import check of the environment reports, one answer per check (None: fine).
+    problems: list[str | None]
+
+    async def check(self, python: Path) -> str | None:
+        self.calls.append("check")
+        return self.problems.pop(0) if getattr(self, "problems", None) else None
 
 
 @pytest.fixture
@@ -48,32 +54,32 @@ async def ensure(env: EditorEnvironment, uv: FakeUv, requirements: str) -> list[
     uv.calls.clear()
     uv.requirements = requirements
     steps: list[str] = []
-    with patch.object(environment, "_uv", uv):
+    with patch.object(environment, "_uv", uv), patch.object(environment, "_check", uv.check):
         assert await env.async_ensure(requirements, steps.append) == env.python
     return uv.calls
 
 
 async def test_installs_once_per_requirements(env: EditorEnvironment) -> None:
     uv = FakeUv(env)
-    assert await ensure(env, uv, "a==1\n") == ["venv", "pip"]
-    # Nothing to do while nothing changed.
-    assert await ensure(env, uv, "a==1\n") == []
+    assert await ensure(env, uv, "a==1\n") == ["venv", "pip", "check"]
+    # Nothing to install while nothing changed; only the import check.
+    assert await ensure(env, uv, "a==1\n") == ["check"]
     # Other requirements: installed into the same environment.
-    assert await ensure(env, uv, "a==2\n") == ["pip"]
+    assert await ensure(env, uv, "a==2\n") == ["pip", "check"]
 
 
 async def test_new_environment_for_another_python(env: EditorEnvironment) -> None:
     uv = FakeUv(env)
     await ensure(env, uv, "a==1\n")
     with patch.object(environment, "python_tag", return_value="3.15 /usr/local/bin/python3"):
-        assert await ensure(env, uv, "a==1\n") == ["venv", "pip"]
+        assert await ensure(env, uv, "a==1\n") == ["venv", "pip", "check"]
 
 
 async def test_new_environment_when_it_is_gone(env: EditorEnvironment) -> None:
     uv = FakeUv(env)
     await ensure(env, uv, "a==1\n")
     env.python.unlink()
-    assert await ensure(env, uv, "a==1\n") == ["venv", "pip"]
+    assert await ensure(env, uv, "a==1\n") == ["venv", "pip", "check"]
 
 
 async def test_failed_install_is_tried_again(env: EditorEnvironment) -> None:
@@ -87,7 +93,46 @@ async def test_failed_install_is_tried_again(env: EditorEnvironment) -> None:
     with patch.object(environment, "_uv", failing), pytest.raises(InstallError):
         uv.requirements = "a==1\n"
         await env.async_ensure("a==1\n")
-    assert await ensure(env, uv, "a==1\n") == ["pip"]
+    assert await ensure(env, uv, "a==1\n") == ["pip", "check"]
+
+
+async def test_damaged_environment_is_created_again(env: EditorEnvironment) -> None:
+    """An environment whose packages cannot be imported (an install cut off by a restart left
+    numpy half written) is created again, though its requirements did not change."""
+    uv = FakeUv(env)
+    await ensure(env, uv, "a==1\n")
+    uv.problems = ["AttributeError: module 'numpy' has no attribute 'dtype'", None]
+    assert await ensure(env, uv, "a==1\n") == ["check", "venv", "pip", "check"]
+    assert await ensure(env, uv, "a==1\n") == ["check"]
+
+
+async def test_damaged_install_is_created_again(env: EditorEnvironment) -> None:
+    uv = FakeUv(env)
+    await ensure(env, uv, "a==1\n")
+    uv.problems = ["ImportError: numpy", None]
+    assert await ensure(env, uv, "a==2\n") == ["pip", "check", "venv", "pip", "check"]
+
+
+async def test_still_damaged_after_creating_it_again(env: EditorEnvironment) -> None:
+    uv = FakeUv(env)
+    await ensure(env, uv, "a==1\n")
+    uv.problems = ["ImportError: numpy", "ImportError: numpy"]
+    uv.requirements = "a==1\n"
+    with (
+        patch.object(environment, "_uv", uv),
+        patch.object(environment, "_check", uv.check),
+        pytest.raises(InstallError, match="cannot be imported: ImportError: numpy"),
+    ):
+        await env.async_ensure("a==1\n")
+    # Not recorded as done: the next start tries again.
+    assert env.state() == {"python": environment.python_tag()}
+
+
+async def test_check_names_why_the_packages_cannot_be_imported(tmp_path: Path) -> None:
+    # A Python that is not there, and one without the editor's packages.
+    assert await environment._check(tmp_path / "python") is not None
+    problem = await environment._check(Path(environment.sys.executable))
+    assert problem is None or "Error" in problem
 
 
 async def test_uv_failure_names_the_output() -> None:

@@ -4,7 +4,8 @@ The editor runs as a process of its own, so it has its own environment: it gets 
 package versions it was released with, and Home Assistant's packages stay as they are. The
 environment uses Home Assistant's Python and is created and filled with uv, which Home Assistant
 itself installs packages with. When Home Assistant moves to another Python version, the
-environment is created again.
+environment is created again. An environment whose packages cannot be imported (an install cut
+off by a restart can leave a package half written) is created again as well.
 """
 
 from __future__ import annotations
@@ -39,6 +40,12 @@ _FOREIGN_UV_SETTINGS = (
     "PIP_EXTRA_INDEX_URL",
     "VIRTUAL_ENV",
 )
+
+
+# What the editor imports first: a damaged install of these shows here, not as the editor ending.
+_CHECK = "import numpy; numpy.dtype; import imgui_bundle; import editor_gui.web.frames"
+_CHECK_TIMEOUT = 120
+_FOREIGN_PYTHON_SETTINGS = ("PYTHONHOME", "PYTHONPATH", "VIRTUAL_ENV")
 
 
 class InstallError(Exception):
@@ -103,9 +110,29 @@ class EditorEnvironment:
         state = await asyncio.to_thread(self.state)
         exists = await asyncio.to_thread(self.python.exists)
         if exists and state == wanted:
-            return self.python
+            if (problem := await _check(self.python)) is None:
+                return self.python
+            _LOGGER.warning("The editor's environment is damaged, creating it again: %s", problem)
+            return await self._async_install(requirements, wanted, progress, create=True)
+        create = not exists or state.get("python") != wanted["python"]
+        python = await self._async_install(requirements, wanted, progress, create=create)
+        if create or (problem := await _check(python)) is None:
+            return python
+        _LOGGER.warning("The editor's environment is damaged, creating it again: %s", problem)
+        return await self._async_install(requirements, wanted, progress, create=True)
+
+    async def _async_install(
+        self,
+        requirements: str,
+        wanted: dict[str, str],
+        progress: Callable[[str], None] | None,
+        *,
+        create: bool,
+    ) -> Path:
+        """Install ``requirements`` (into a new environment with ``create``) and record
+        ``wanted``. A new environment whose packages still cannot be imported is an error."""
         await asyncio.to_thread(self.root.mkdir, parents=True, exist_ok=True)
-        if not exists or state.get("python") != wanted["python"]:
+        if create:
             if progress:
                 progress("Creating the environment")
             await _uv("venv", "--clear", "--python", sys.executable, str(self.venv))
@@ -125,8 +152,39 @@ class EditorEnvironment:
             "--no-cache",
             str(self._requirements_file),
         )
+        if create and (problem := await _check(self.python)) is not None:
+            raise InstallError(f"The editor's packages cannot be imported: {problem}")
         await asyncio.to_thread(self._write_state, wanted)
         return self.python
+
+
+async def _check(python: Path) -> str | None:
+    """Why the packages of the environment of ``python`` cannot be imported (the end of the
+    error), or None when they can."""
+    try:
+        process = await asyncio.create_subprocess_exec(
+            str(python),
+            "-c",
+            _CHECK,
+            # As the editor's process gets it: without Home Assistant's own Python settings.
+            env={k: v for k, v in os.environ.items() if k not in _FOREIGN_PYTHON_SETTINGS},
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+    except OSError as error:
+        return str(error)
+    try:
+        async with asyncio.timeout(_CHECK_TIMEOUT):
+            output, _ = await process.communicate()
+    except TimeoutError:
+        process.kill()
+        await process.wait()
+        return f"importing took longer than {_CHECK_TIMEOUT} s"
+    if process.returncode:
+        lines = output.decode("utf-8", "replace").strip().splitlines()
+        return lines[-1] if lines else f"exit code {process.returncode}"
+    return None
 
 
 async def _uv(*args: str) -> None:
