@@ -209,8 +209,8 @@ async def test_the_knx_integration_s_own_way_refuses(
 
 @pytest.fixture
 def suggestions_module(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
-    """The KNX integration's entity suggestions with those of building functions (Home
-    Assistant 2026.12), as a stand-in: what it was asked, what it answers."""
+    """The KNX integration's entity suggestions with those of building functions, as a
+    stand-in: what it was asked, what it answers."""
     module = SimpleNamespace(
         SUGGESTION_PROVIDERS=[SimpleNamespace(provider_id="fb"), SimpleNamespace(provider_id="fn")],
         asked=[],
