@@ -1,22 +1,23 @@
 """Home Assistant's KNX integration, as far as the editor uses it: the project it holds.
 
-The KNX integration has no API for another integration to give it a project: the project is
-uploaded in its panel, parsed with xknxproject and stored. The editor sends the same parsed form,
-and this module stores and loads it the way the upload does (``KNXProject.process_project_file``
-in ``homeassistant/components/knx/project.py``). Everything that reaches into the KNX integration
-is in this module, so a change there is a change here only.
+The editor sends its project in the form xknxproject parses an uploaded project file into. A KNX
+integration with ``async_set_project`` (``homeassistant/components/knx/project.py``) validates,
+stores and loads it itself. For an older one without it, this module stores and loads it the way
+the upload does (``KNXProject.process_project_file``). Everything that reaches into the KNX
+integration is in this module, so a change there is a change here only.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.core import callback as ha_callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.storage import STORAGE_DIR
@@ -463,17 +464,28 @@ def _check(project: Any) -> dict[str, Any]:
     return project
 
 
+def _public_set_project() -> Callable[[HomeAssistant, Mapping[str, Any]], Awaitable[None]] | None:
+    """``async_set_project`` of a KNX integration that takes project data from other sources."""
+    # Only imported once the KNX integration is set up, so its requirements are installed.
+    from homeassistant.components import knx
+
+    return getattr(knx, "async_set_project", None)
+
+
 async def async_set_project(hass: HomeAssistant, project: Any) -> None:
     """Make ``project`` the KNX integration's project, stored as an uploaded one is."""
     data = _check(project)
     knx = _knx(hass)
     if knx is None or not hasattr(knx, "project"):
         raise KnxError("the KNX integration is not set up")
-    holder = knx.project
-    if (set_project := getattr(holder, "async_set_project", None)) is not None:
-        # A KNX integration that takes project data from other sources itself.
-        await set_project(knx.xknx, data)
+    if (set_project := _public_set_project()) is not None:
+        try:
+            await set_project(hass, data)
+        except HomeAssistantError as error:
+            # Invalid data, or data of another xknxproject version: the project stays.
+            raise KnxError(str(error)) from error
     else:
+        holder = knx.project
         try:
             lock = holder._project_lock
             store = holder._store

@@ -1,11 +1,13 @@
 """The editor's project in Home Assistant's KNX integration: stored and loaded as an upload is."""
 
+import inspect
 from datetime import timedelta
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util import dt as dt_util
@@ -26,7 +28,9 @@ from custom_components.xknx_editor.knx_bridge import (
 
 # The KNX integration's own classes: what the bridge reaches into.
 knx_project = pytest.importorskip("homeassistant.components.knx.project")
+knx_component = pytest.importorskip("homeassistant.components.knx")
 xknx_module = pytest.importorskip("xknx")
+xknxproject_version = pytest.importorskip("xknxproject.__version__").__version__
 
 
 def _ga(address: str) -> Any:
@@ -38,7 +42,11 @@ class _KnxModule:
 
     def __init__(self, hass: HomeAssistant) -> None:
         self.xknx = xknx_module.XKNX()
-        self.project = knx_project.KNXProject(hass, MockConfigEntry(domain="knx"))
+        # A newer KNX integration hands its XKNX instance to the project.
+        takes_xknx = "xknx" in inspect.signature(knx_project.KNXProject).parameters
+        self.project = knx_project.KNXProject(
+            hass, MockConfigEntry(domain="knx"), **({"xknx": self.xknx} if takes_xknx else {})
+        )
         # The entities by group address (KNXModule.get_group_address_entities).
         self.entities: dict[str, list[dict[str, Any]]] = {}
 
@@ -57,7 +65,8 @@ def _project(*addresses: str, name: str = "House") -> dict[str, Any]:
             "created_by": "XKNX Editor",
             "schema_version": "23",
             "tool_version": "XKNX Editor 0.9.12",
-            "xknxproject_version": "3.10.0",
+            # The KNX integration takes data of the xknxproject version it has.
+            "xknxproject_version": xknxproject_version,
             "language_code": "de-DE",
         },
         "communication_objects": {},
@@ -166,23 +175,31 @@ async def test_a_knx_integration_without_the_parts_used(hass: HomeAssistant) -> 
         await async_set_project(hass, _project("1/2/3"))
 
 
-async def test_a_knx_integration_with_its_own_way_is_used(hass: HomeAssistant) -> None:
+async def test_the_knx_integration_s_own_way_is_used(
+    hass: HomeAssistant, knx: _KnxModule, monkeypatch: pytest.MonkeyPatch
+) -> None:
     taken: list[Any] = []
 
-    class _Project:
-        async def async_set_project(self, xknx: Any, project: Any) -> None:
-            taken.append((xknx, project))
+    async def set_project(hass_: HomeAssistant, project: Any) -> None:
+        taken.append((hass_, project))
 
-    class _Module:
-        def __init__(self) -> None:
-            self.xknx = object()
-            self.project = _Project()
-
-    module = _Module()
-    hass.data["knx"] = module
+    monkeypatch.setattr(knx_component, "async_set_project", set_project, raising=False)
     project = _project("1/2/3")
     await async_set_project(hass, project)
-    assert taken == [(module.xknx, project)]
+    assert taken == [(hass, project)]
+    # The KNX integration stores and loads it itself.
+    assert not knx.project.loaded
+
+
+async def test_the_knx_integration_s_own_way_refuses(
+    hass: HomeAssistant, knx: _KnxModule, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def set_project(hass_: HomeAssistant, project: Any) -> None:
+        raise HomeAssistantError("Invalid KNX project data: required key not provided")
+
+    monkeypatch.setattr(knx_component, "async_set_project", set_project, raising=False)
+    with pytest.raises(KnxError, match="required key not provided"):
+        await async_set_project(hass, _project("1/2/3"))
 
 
 async def test_what_home_assistant_does_with_the_group_addresses(
