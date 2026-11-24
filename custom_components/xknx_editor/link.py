@@ -8,8 +8,9 @@ While the editor runs, the integration signs in to it (as its proxy does) and ke
 at the start and whenever that changes, the last value of each group address once (``values``)
 and every telegram of the KNX integration (``telegram``). It stores a project the editor sends as
 the KNX integration's project and answers a request for the recorded telegrams
-(``telegram_history``). An editor without the link (an older version) is asked again now and
-then.
+(``telegram_history``) and for the KNX integration's entity suggestions for the building
+functions of the project it holds (``function_suggestions``, when ``knx`` says it has them). An
+editor without the link (an older version) is asked again now and then.
 """
 
 from __future__ import annotations
@@ -32,12 +33,14 @@ from .const import EDITOR_COOKIE
 from .entities import EntityLinks
 from .knx_bridge import (
     KnxError,
+    async_function_suggestions,
     async_send_group,
     async_set_keyring,
     async_set_project,
     async_set_time_server,
     async_telegram_history,
     connection_info,
+    function_suggestions_available,
     group_address_usage,
     keyring_allowed,
     knx_loaded,
@@ -86,6 +89,8 @@ class EditorLink:
             # Where its time server sends time and date to; why the editor's keys cannot be its.
             "time_server": time_server(self.hass),
             "keyring_refused": keyring_allowed(self.hass),
+            # Whether it suggests entities for building functions (function_suggestions).
+            "function_suggestions": function_suggestions_available(self.hass),
         }
 
     async def async_run(self) -> None:
@@ -304,3 +309,13 @@ class EditorLink:
                 _LOGGER.exception("The KNX integration's telegrams could not be read")
                 answer["error"] = str(failure) or type(failure).__name__
             outbox.put_nowait(answer)
+        elif kind == "function_suggestions":
+            found: dict[str, Any] = {"type": "result", "id": message.get("id"), "error": None}
+            try:
+                found.update(await async_function_suggestions(self.hass))
+            except KnxError as failure:
+                found["error"] = str(failure)
+            except Exception as failure:  # the editor falls back to its own
+                _LOGGER.exception("The KNX integration's entity suggestions could not be read")
+                found["error"] = str(failure) or type(failure).__name__
+            outbox.put_nowait(found)

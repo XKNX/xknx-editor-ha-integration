@@ -1,6 +1,8 @@
 """The editor's project in Home Assistant's KNX integration: stored and loaded as an upload is."""
 
 import inspect
+import sys
+from collections.abc import Iterator
 from datetime import timedelta
 from types import SimpleNamespace
 from typing import Any
@@ -13,12 +15,15 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant.common import MockConfigEntry
 
+from custom_components.xknx_editor import knx_bridge
 from custom_components.xknx_editor.knx_bridge import (
     KnxError,
+    async_function_suggestions,
     async_send_group,
     async_set_project,
     async_telegram_history,
     connection_info,
+    function_suggestions_available,
     group_address_usage,
     knx_loaded,
     latest_telegrams,
@@ -200,6 +205,82 @@ async def test_the_knx_integration_s_own_way_refuses(
     monkeypatch.setattr(knx_component, "async_set_project", set_project, raising=False)
     with pytest.raises(KnxError, match="required key not provided"):
         await async_set_project(hass, _project("1/2/3"))
+
+
+@pytest.fixture
+def suggestions_module(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
+    """The KNX integration's entity suggestions with those of building functions (Home
+    Assistant 2026.12), as a stand-in: what it was asked, what it answers."""
+    module = SimpleNamespace(
+        SUGGESTION_PROVIDERS=[SimpleNamespace(provider_id="fb"), SimpleNamespace(provider_id="fn")],
+        asked=[],
+        answer={
+            "suggestions": [
+                {"id": "fb_1.1.1_CH-1", "source": "fb", "suggested_name": "Channel"},
+                {"id": "fn_F-1", "source": "fn", "suggested_name": "Light"},
+            ],
+            "providers": {"fb": {}, "fn": {"state": "ok", "function_types_found": ["FT-1"]}},
+        },
+    )
+
+    async def get(hass: HomeAssistant, knx: Any, suggestion_filter: Any = None) -> Any:
+        module.asked.append(knx)
+        return module.answer
+
+    module.async_get_entity_suggestions = get
+    monkeypatch.setitem(
+        sys.modules, "homeassistant.components.knx.storage.entity_suggestions", module
+    )
+    knx_bridge._suggestions_module.cache_clear()
+    yield module
+    knx_bridge._suggestions_module.cache_clear()
+
+
+async def test_the_function_suggestions_of_the_knx_integration(
+    hass: HomeAssistant, knx: _KnxModule, suggestions_module: SimpleNamespace
+) -> None:
+    assert function_suggestions_available(hass)
+    assert await async_function_suggestions(hass) == {
+        "suggestions": [{"id": "fn_F-1", "source": "fn", "suggested_name": "Light"}],
+        "hints": {"state": "ok", "function_types_found": ["FT-1"]},
+    }
+    assert suggestions_module.asked == [knx]
+    # An answer of another form.
+    suggestions_module.answer = {"suggestions": []}
+    with pytest.raises(KnxError, match="not supported"):
+        await async_function_suggestions(hass)
+
+
+async def test_no_function_suggestions_without_the_provider(
+    hass: HomeAssistant, knx: _KnxModule, suggestions_module: SimpleNamespace
+) -> None:
+    suggestions_module.SUGGESTION_PROVIDERS = [SimpleNamespace(provider_id="fb")]
+    knx_bridge._suggestions_module.cache_clear()
+    assert not function_suggestions_available(hass)
+    with pytest.raises(KnxError, match="not supported"):
+        await async_function_suggestions(hass)
+
+
+async def test_no_function_suggestions_of_an_older_knx_integration(
+    hass: HomeAssistant, knx: _KnxModule, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Home Assistant up to 2026.11 has no entity suggestions module.
+    monkeypatch.setitem(
+        sys.modules, "homeassistant.components.knx.storage.entity_suggestions", None
+    )
+    knx_bridge._suggestions_module.cache_clear()
+    try:
+        assert not function_suggestions_available(hass)
+        with pytest.raises(KnxError, match="not supported"):
+            await async_function_suggestions(hass)
+    finally:
+        knx_bridge._suggestions_module.cache_clear()
+
+
+async def test_no_function_suggestions_without_the_knx_integration(hass: HomeAssistant) -> None:
+    assert not function_suggestions_available(hass)
+    with pytest.raises(KnxError, match="not set up"):
+        await async_function_suggestions(hass)
 
 
 async def test_what_home_assistant_does_with_the_group_addresses(

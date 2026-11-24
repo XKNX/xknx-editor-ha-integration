@@ -24,6 +24,7 @@ _WITHOUT_KNX = {
     "connection": None,
     "time_server": None,
     "keyring_refused": "the KNX integration is not set up",
+    "function_suggestions": False,
 }
 
 pytestmark = pytest.mark.usefixtures("socket_enabled")
@@ -292,6 +293,49 @@ async def test_the_recorded_telegrams_are_given(
     assert result["error"] == "the KNX integration's telegram history is not ready"
     await editor.socket.send_json({"type": "telegram_history", "id": 6, "hours": "x"})
     assert (await editor.next("result"))["error"]
+
+
+async def test_the_function_suggestions_are_given(
+    hass: HomeAssistant, editor: _Editor, linked: tuple[EditorLink, _Manager]
+) -> None:
+    await editor.next("knx")
+    found = {
+        "suggestions": [{"id": "fn_F-1", "source": "fn", "suggested_name": "Light"}],
+        "hints": {"state": "ok"},
+    }
+
+    async def suggestions(_hass: HomeAssistant) -> dict[str, Any]:
+        return found
+
+    async def unsupported(_hass: HomeAssistant) -> dict[str, Any]:
+        raise KnxError("this version of the KNX integration is not supported: no functions")
+
+    async def broken(_hass: HomeAssistant) -> dict[str, Any]:
+        raise RuntimeError
+
+    # Whether the KNX integration has them is part of its state.
+    with patch.object(link_module, "function_suggestions_available", return_value=True):
+        assert (await editor.next("knx"))["function_suggestions"] is True
+    assert editor.socket is not None
+    with patch.object(link_module, "async_function_suggestions", suggestions):
+        await editor.socket.send_json({"type": "function_suggestions", "id": 8})
+        assert await editor.next("result") == {
+            "type": "result",
+            "id": 8,
+            "error": None,
+            **found,
+        }
+    with patch.object(link_module, "async_function_suggestions", unsupported):
+        await editor.socket.send_json({"type": "function_suggestions", "id": 9})
+        result = await editor.next("result")
+    assert result == {
+        "type": "result",
+        "id": 9,
+        "error": "this version of the KNX integration is not supported: no functions",
+    }
+    with patch.object(link_module, "async_function_suggestions", broken):
+        await editor.socket.send_json({"type": "function_suggestions", "id": 10})
+        assert (await editor.next("result"))["error"] == "RuntimeError"
 
 
 async def test_floors_and_areas_for_the_editor(

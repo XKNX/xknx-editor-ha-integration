@@ -9,6 +9,7 @@ integration is in this module, so a change there is a change here only.
 
 from __future__ import annotations
 
+import functools
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import timedelta
@@ -451,6 +452,59 @@ async def async_set_keyring(hass: HomeAssistant, keyring: bytes, password: str) 
         data={**entry.data, "knxkeys_filename": _KEYRING_FILE, "knxkeys_password": password},
     )
     hass.config_entries.async_schedule_reload(entry.entry_id)
+
+
+# The KNX integration's provider of entity suggestions from the building functions of the
+# project it holds (``storage/entity_suggestions/functions.py``), the prefix of its ids.
+_FUNCTION_PROVIDER = "fn"
+
+
+@functools.cache
+def _suggestions_module() -> Any | None:
+    """The KNX integration's entity suggestions (``storage/entity_suggestions``) if they have
+    suggestions from building functions, else None (an older KNX integration). Looked up once:
+    the KNX integration only changes with Home Assistant, which then starts again."""
+    try:
+        from homeassistant.components.knx.storage import entity_suggestions
+    except ImportError:
+        return None
+    providers = getattr(entity_suggestions, "SUGGESTION_PROVIDERS", ())
+    if not hasattr(entity_suggestions, "async_get_entity_suggestions") or not any(
+        getattr(provider, "provider_id", None) == _FUNCTION_PROVIDER for provider in providers
+    ):
+        return None
+    return entity_suggestions
+
+
+def function_suggestions_available(hass: HomeAssistant) -> bool:
+    """Whether the KNX integration suggests entities for the building functions of its
+    project."""
+    return knx_loaded(hass) and _suggestions_module() is not None
+
+
+async def async_function_suggestions(hass: HomeAssistant) -> dict[str, Any]:
+    """The KNX integration's entity suggestions for the building functions of the project it
+    holds, as its panel gets them (``knx/get_entity_suggestions``): {suggestions: those of
+    the functions (id ``fn_<function id>``), hints: what it says about the functions}."""
+    if not knx_loaded(hass):
+        raise KnxError("the KNX integration is not set up")
+    module = _suggestions_module()
+    if module is None:
+        raise KnxError(
+            "this version of the KNX integration is not supported: it suggests no entities "
+            "for building functions"
+        )
+    try:
+        result = await module.async_get_entity_suggestions(hass, _knx(hass))
+        suggestions = [
+            dict(suggestion)
+            for suggestion in result["suggestions"]
+            if suggestion.get("source") == _FUNCTION_PROVIDER
+        ]
+        hints = dict(result["providers"].get(_FUNCTION_PROVIDER) or {})
+    except (KeyError, TypeError, AttributeError) as error:
+        raise KnxError(f"this version of the KNX integration is not supported: {error}") from error
+    return {"suggestions": suggestions, "hints": hints}
 
 
 def _check(project: Any) -> dict[str, Any]:
