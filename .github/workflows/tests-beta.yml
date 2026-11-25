@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.4.0
       - run: uv venv --python 3.14
       # The newest release, a beta too (the pre-release in the version lets uv take one).
       - run: uv pip install "pytest-homeassistant>=2026.11.0b0"
